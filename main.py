@@ -33,7 +33,7 @@ aiclient = OpenAI(
     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
     )
     
-model = SentenceTransformer('/bot/text2vec-base-chinese', local_files_only=True)
+model = SentenceTransformer('./bge-small-zh-v1.5', local_files_only=True)
 
 INDEX_MC_PATH = "/bot/wiki_mc.index"  # 你的mc wiki索引文件路径
 index_mc = faiss.read_index(INDEX_MC_PATH)
