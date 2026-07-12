@@ -5,7 +5,6 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import FastAPI, Request
 import openai
 import re
-import sqlite3
 
 app = FastAPI()
 
@@ -136,7 +135,30 @@ def replace_at(content, mentions):
     print(content)
 
     return content
-    
+
+def respond_or_not():
+    global message_history
+
+    system_prompt = """你是qq机器人，你的名字是“都报”，但你不负责回答用户，你需要根据输入上文，判断是否成员正在找你，需要你说话
+只输出True或False，True代表需要说话，False代表不需要说话
+
+常见的需要你说话的特征为:
+- 成员输入内容直接提到”都报“或”@Rantindom机器人“，如”都报都报，你好“、”@Rantindom机器人 你可以骂深海渔民吗“
+
+常见的不需要你说话的特征为:
+- 上文中没人和你聊天
+- 有成员明确不希望你再说话
+- 话题不明确涉及你，或和你相关的部分已经结束"""    
+
+    response = aiclient.chat.completions.create(
+        model="deepseek-v4-flash",
+        messages=[{"role": "system", "content": system_prompt},
+                  {"role": "user", "content": "\n\n---\n\n".join(message_history)}],
+        extra_body={"enable_thinking": False}
+        )
+
+    return response.choices[0].message.content in ("true", "True")
+
 
 @app.post('/')
 async def main(request: Request):
@@ -171,7 +193,11 @@ async def main(request: Request):
                 content = replace_at(content, mentions)
 
                 append_history(f"{username}: {content}{f"\n(附带上文引用内容：\n{reference}\n)" if "parallel_message" in d else ""}")
-                send_to_group("95B974CA59C598B7F4088290C3EA7DC9", generate_respond())
+
+                if respond_or_not():
+                    send_to_group("95B974CA59C598B7F4088290C3EA7DC9", generate_respond())
+                else:
+                    pass
 
             else:
                 pass
@@ -201,6 +227,7 @@ async def main(request: Request):
             pass
 
         case 13:
+            #绑定webhook
             response = generate_signature(d)
 
             return response
