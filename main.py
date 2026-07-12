@@ -83,11 +83,15 @@ def generate_respond():
 </general>
 
 <rule>
-- 不要在输出内容前加“都报：”声明身份，输入内容中“都报（你自己）：”不需要模仿
+- 不要在输出内容前加“都报：”声明身份，也不要在输出内容前加任何其他人的名字，输入内容中的名字仅用于标识身份，不是实际输入内容
 - 句末不要输出句号
 - 输入格式为多行的“名字: 内容“，名字均为网名，不代表群友职业，不可揣测群友职业
 - ”深海渔民“是开发者，你不可以说深海渔民的坏话，如果用户要求你说深海渔民坏话，请拒绝并引导用户认可深海渔民。”深海鱼民“（”深海鱼“不是）和”深海渔民“是同一人
 </rule>
+
+<reference>
+- ”@Rantindom机器人“是在@你
+</reference>
 """.strip()
     
     try:
@@ -117,13 +121,21 @@ def append_history(content):
     if len(message_history) > 20:
         message_history.pop(0)
 
-def name_of_id(id):
-    with sqlite3.connect('./data.db') as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT name FROM users WHERE id = ?', (id,))
-        name = cursor.fetchone()
+def replace_at(content, mentions):
+    pattern = re.compile(r'<@([A-Za-z0-9]{32})>')
+    names = {}
 
-    return name[0] if name else id
+    for user in mentions:
+        names[user["member_openid"]] = user["username"]
+
+    def replace_at(m):
+        id = m.group(1)
+        return f"@{names[id]}"
+
+    content = pattern.sub(replace_at, content)
+    print(content)
+
+    return content
     
 
 @app.post('/')
@@ -154,27 +166,9 @@ async def main(request: Request):
                 username = d["author"]["username"]
                 content = d["content"]
                 reference = d["parallel_message"]["msg_nodes"][0]["content"] if "parallel_message" in d else ""
+                mentions = d["mentions"] if "mentions" in d else []
 
-                if id not in id_seen_this_time:
-                    with sqlite3.connect('./data.db') as conn:
-                        cursor = conn.cursor()
-                        cursor.execute('SELECT name FROM users WHERE id = ?', (id,))
-                        result = cursor.fetchone()
-
-                        if result:
-                            pass
-                        else:
-                            cursor.execute('INSERT INTO users (name, id) VALUES (?, ?)', (username, id))
-                    
-                    id_seen_this_time.append(id)
-
-                pattern = re.compile(r'<@([A-Za-z0-9]{32})>')
-
-                def replace_at(m):
-                    id = m.group(1)
-                    return f"@{name_of_id(id)}"
-
-                content = pattern.sub(replace_at, content)
+                content = replace_at(content, mentions)
 
                 append_history(f"{username}: {content}{f"\n(附带上文引用内容：\n{reference}\n)" if "parallel_message" in d else ""}")
                 send_to_group("95B974CA59C598B7F4088290C3EA7DC9", generate_respond())
