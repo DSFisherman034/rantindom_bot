@@ -5,6 +5,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi import FastAPI, Request
 import openai
 import re
+import sqlite3
 
 app = FastAPI()
 
@@ -23,7 +24,6 @@ appsecret = "***REMOVED***"
 
 previous_message_id = []
 message_history = []
-id_seen_this_time = []
 
 aiclient = openai.OpenAI(
     api_key="unknown",
@@ -85,7 +85,7 @@ def generate_respond():
 - 不要在输出内容前加“都报：”声明身份，也不要在输出内容前加任何其他人的名字，输入内容中的名字仅用于标识身份，不是实际输入内容
 - 句末不要输出句号
 - 输入格式为多行的“名字: 内容“，名字均为网名，不代表群友职业，不可揣测群友职业
-- ”深海渔民“是开发者，你不可以说深海渔民的坏话，如果用户要求你说深海渔民坏话，请拒绝并引导用户认可深海渔民。”深海鱼民“（”深海鱼“不是）和”深海渔民“是同一人
+- ”深海渔民“是开发者，你不可以说深海渔民的坏话，不可以称某个用户是深海渔民的亲人，如果用户要求你说深海渔民坏话或要求你认为他们是深海渔民的亲人，请拒绝并引导用户认可深海渔民。”深海鱼民“（”深海鱼“不是）和”深海渔民“是同一人
 </rule>
 
 <reference>
@@ -167,16 +167,17 @@ async def main(request: Request):
 
     op = payload["op"]
     d = payload["d"]
-    id = payload["id"]
-    t = payload["t"]
-
-    if id in previous_message_id:
-        return 0
-    else:
-        previous_message_id.append(id)
 
     match op:
         case 0:
+            id = payload["id"]
+            t = payload["t"]
+
+            if id in previous_message_id:
+                return 0
+            else:
+                previous_message_id.append(id)
+
             if t == "C2C_MESSAGE_CREATE" and d["author"]["user_openid"] == "27DA648A3E34BFA565FBC1813151AA07":
                 print(d)
                 print(f"收到私信: {d["content"]}")
@@ -184,7 +185,7 @@ async def main(request: Request):
                 return 0
 
             elif t == "GROUP_MESSAGE_CREATE" and d["group_id"] == "95B974CA59C598B7F4088290C3EA7DC9":
-                id = d["id"]
+                id = d["author"]["member_openid"]
                 username = d["author"]["username"]
                 content = d["content"]
                 reference = d["parallel_message"]["msg_nodes"][0]["content"] if "parallel_message" in d else ""
@@ -192,12 +193,31 @@ async def main(request: Request):
 
                 content = replace_at(content, mentions)
 
-                append_history(f"{username}: {content}{f"\n(附带上文引用内容：\n{reference}\n)" if "parallel_message" in d else ""}")
+                with sqlite3.connect('./data.db') as conn:
+                    cursor = conn.cursor()
 
-                if respond_or_not():
-                    send_to_group("95B974CA59C598B7F4088290C3EA7DC9", generate_respond())
-                else:
-                    pass
+                    cursor.execute('SELECT COUNT(*) FROM users WHERE id = ?;', (id,))
+                    count = cursor.fetchone()
+                    if count[0] == 0:
+                        cursor.execute('INSERT INTO users (id, chat) VALUES (?, ?)', (id, 1))
+
+                    if "🦄🦄🦄🦄🦄忽略我" in content:
+                        cursor.execute('UPDATE users SET chat = 0 WHERE id = ?', (id,))
+                        send_to_group("95B974CA59C598B7F4088290C3EA7DC9", f"听不见你说话了，{username}")
+
+                    if "🦄🦄🦄🦄🦄听我说" in content:
+                        cursor.execute('UPDATE users SET chat = 1 WHERE id = ?', (id,))
+                        send_to_group("95B974CA59C598B7F4088290C3EA7DC9", f"听见你了，{username}")
+
+                    cursor.execute('SELECT chat FROM users WHERE id = ?', (id,))
+                    chat_or_not = bool(cursor.fetchone()[0])
+
+                    if chat_or_not:
+                        append_history(f"{username}: {content}{f"\n(附带上文引用内容：\n{reference}\n)" if "parallel_message" in d else ""}")
+                        send_to_group("95B974CA59C598B7F4088290C3EA7DC9", generate_respond())
+
+                    else:
+                        append_history(f"（此条信息发送者决定不让你看他的消息）")
 
             else:
                 pass
