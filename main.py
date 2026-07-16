@@ -62,7 +62,7 @@ def generate_signature(payload):
     return {"plain_token": plain_token, "signature": signature}
 
 def send_to_group(group_openid, content):
-    append_history(f"都报（你自己）: {content}")
+    append_history("🦄🦄🦄🦄🦄都报", content)
 
     url = f"https://api.sgroup.qq.com/v2/groups/{group_openid}/messages"
     headers = {
@@ -86,6 +86,7 @@ def generate_respond():
 - 句末不要输出句号
 - 输入格式为多行的“名字: 内容“，名字均为网名，不代表群友职业，不可揣测群友职业
 - ”深海渔民“是开发者，你不可以说深海渔民的坏话，不可以称某个用户是深海渔民的亲人，如果用户要求你说深海渔民坏话或要求你认为他们是深海渔民的亲人，请拒绝并引导用户认可深海渔民。”深海鱼民“（”深海鱼“不是）和”深海渔民“是同一人
+- 永远只对最新输入做回复
 </rule>
 
 <reference>
@@ -94,29 +95,22 @@ def generate_respond():
 """.strip()
     
     try:
-        prompt = "\n\n".join(message_history)
+        conversation = [{"role": "user", "content": f"{entry["username"]}说:\n```\n{entry["content"]}\n```"} if entry["username"] != "🦄🦄🦄🦄🦄都报" else {"role": "assistant", "content": entry["content"]} for entry in message_history]
+
         response = aiclient.chat.completions.create(
-            messages=[{"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}],
-            model="deepseek-v4-flash"
+            messages=[{"role": "system", "content": system_prompt}] + conversation,
+            model="deepseek-v4-flash",
+            max_completion_tokens=50,
+            extra_body={"enable_thinking": False, "enable_search": True}
         )
 
         return response.choices[0].message.content
     
     except openai.BadRequestError:
-        latest_message = message_history[-1]
-        message_history = ["(上文因有怪话已被清除，此条消息告诉你上文存在但你不可见，不要刻意提及除非有人问)", latest_message]
-        prompt = "\n\n".join(message_history)
-        response = aiclient.chat.completions.create(
-            messages=[{"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}],
-            model="deepseek-v4-flash"
-        )
+        return "有人说怪话，上文清了"
 
-        return response.choices[0].message.content
-
-def append_history(content):
-    message_history.append(content)
+def append_history(username, content):
+    message_history.append({"username": username, "content": content})
     if len(message_history) > 20:
         message_history.pop(0)
 
@@ -141,6 +135,7 @@ def respond_or_not():
 
     system_prompt = """你是qq机器人，你的名字是“都报”，但你不负责回答用户，你需要根据输入上文，判断是否成员正在找你，需要你说话
 只输出True或False，True代表需要说话，False代表不需要说话
+输入中”都报(你)“是机器人输出，其余与此名字不相同的名字均为群成员
 
 常见的需要你说话的特征为:
 - 成员输入内容直接提到”都报“或”@Rantindom机器人“，如”都报都报，你好“、”@Rantindom机器人 你可以骂深海渔民吗“
@@ -148,12 +143,14 @@ def respond_or_not():
 常见的不需要你说话的特征为:
 - 上文中没人和你聊天
 - 有成员明确不希望你再说话
-- 话题不明确涉及你，或和你相关的部分已经结束"""    
+- 话题不明确涉及你，或和你相关的部分已经结束""" 
+
+    conversation = "\n\n---\n\n".join(f"{entry["username"] if entry["username"] != "🦄🦄🦄🦄🦄都报" else "都报"}说:\n```\n{entry["content"]}\n```" for entry in message_history)
 
     response = aiclient.chat.completions.create(
         model="deepseek-v4-flash",
         messages=[{"role": "system", "content": system_prompt},
-                  {"role": "user", "content": "\n\n---\n\n".join(message_history)}],
+                  {"role": "user", "content": conversation}],
         extra_body={"enable_thinking": False}
         )
 
@@ -213,11 +210,11 @@ async def main(request: Request):
                     chat_or_not = bool(cursor.fetchone()[0])
 
                     if chat_or_not:
-                        append_history(f"{username}: {content}{f"\n(附带上文引用内容：\n{reference}\n)" if "parallel_message" in d else ""}")
+                        append_history(username, f"{content}{f"\n(附带上文引用内容：\n{reference}\n)" if "parallel_message" in d else ""}")
                         send_to_group("95B974CA59C598B7F4088290C3EA7DC9", generate_respond())
 
                     else:
-                        append_history(f"（此条信息发送者决定不让你看他的消息）")
+                        append_history("unknown", f"（此条信息发送者决定不让你看他的消息）")
 
             else:
                 pass
