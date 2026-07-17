@@ -139,11 +139,11 @@ def respond_or_not():
 
 常见的需要你说话的特征为:
 - 成员输入内容直接提到”都报“或”@Rantindom机器人“，如”都报都报，你好“、”@Rantindom机器人 你可以骂深海渔民吗“
+- 上文满足“成员输入内容直接提到”都报“或”@Rantindom机器人“”但当前话题尚未完成。若当前话题尚未完成但上文已没有“都报”或“@Rantindom机器人”字样则需判定为不需要说话
 
 常见的不需要你说话的特征为:
-- 上文中没人和你聊天
-- 有成员明确不希望你再说话
-- 话题不明确涉及你，或和你相关的部分已经结束""" 
+- 有成员明确需要你闭嘴
+""" 
 
     conversation = "\n\n---\n\n".join(f"{entry["username"] if entry["username"] != "🦄🦄🦄🦄🦄都报" else "都报"}说:\n```\n{entry["content"]}\n```" for entry in message_history)
 
@@ -153,6 +153,9 @@ def respond_or_not():
                   {"role": "user", "content": conversation}],
         extra_body={"enable_thinking": False}
         )
+    
+    print(conversation)
+    print(f"返回{response.choices[0].message.content}")
 
     return response.choices[0].message.content in ("true", "True")
 
@@ -210,38 +213,15 @@ async def main(request: Request):
                     chat_or_not = bool(cursor.fetchone()[0])
 
                     if chat_or_not:
-                        append_history(username, f"{content}{f"\n(附带上文引用内容：\n{reference}\n)" if "parallel_message" in d else ""}")
-                        send_to_group("95B974CA59C598B7F4088290C3EA7DC9", generate_respond())
+                        if respond_or_not():
+                            append_history(username, f"{content}{f"\n(附带上文引用内容：\n{reference}\n)" if "parallel_message" in d else ""}")
+                            send_to_group("95B974CA59C598B7F4088290C3EA7DC9", generate_respond())
 
                     else:
                         append_history("unknown", f"（此条信息发送者决定不让你看他的消息）")
 
             else:
                 pass
-
-        case 1:
-            pass
-
-        case 2:
-            pass
-
-        case 6:
-            pass
-
-        case 7:
-            pass
-
-        case 9:
-            pass
-
-        case 10:
-            pass
-
-        case 11:
-            pass
-
-        case 12:
-            pass
 
         case 13:
             #绑定webhook
