@@ -1,81 +1,24 @@
-import requests
-import json
-import json
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from fastapi import FastAPI, Request
+from botsns import QQClient, QQCallbacks
 import openai
-import re
 import sqlite3
+import re
+import json
+import base64
 
-app = FastAPI()
-
-group_id={
-    "26EB43931720954A79D89989C3B29278": "开发者团队群",
-    "27A9F65E088E6559792350DFA96C2326": "测试者群",
-    "95B974CA59C598B7F4088290C3EA7DC9": "交流1群",
-    "0E0F9F8E6084342A0819481474E2D312": "交流2群"
-}
- 
-#机器人配置
-qq_number = "3889624799"
 appid = "***REMOVED***"
-token = "RFOFsu87pn7d5CANmcaI4v0EzLzmBPg7"
 appsecret = "***REMOVED***"
 
-previous_message_id = []
-message_history = []
+group_id = "95B974CA59C598B7F4088290C3EA7DC9"
 
 aiclient = openai.OpenAI(
     api_key="unknown",
-    base_url="unknown"
-    )
+    base_url="unknown",
+)
 
-def authorize():
-    headers = {
-        "Content-Type": "application/json"
-    }
-    data = {
-        "appId": appid,
-        "clientSecret": appsecret
-        }
-    req = requests.post(url='https://bots.qq.com/app/getAppAccessToken', headers=headers, json=data)
-    respond = json.loads(req.text)
+message_history = []
 
-    access_token = respond["access_token"]
-    expires_in = respond["expires_in"]
-
-    return access_token
-
-def generate_signature(payload):
-    seed = appsecret
-    while len(seed) < 32:
-        seed += seed
-    seed = seed[:32].encode("utf-8")
-    private_key = Ed25519PrivateKey.from_private_bytes(seed)
-
-    event_ts = payload["event_ts"]
-    plain_token = payload["plain_token"]
-    target_string = (event_ts + plain_token).encode("utf-8")
-
-    signature = private_key.sign(target_string).hex()
-
-    return {"plain_token": plain_token, "signature": signature}
-
-def send_to_group(group_openid, content):
-    append_history("🦄🦄🦄🦄🦄都报", content)
-
-    url = f"https://api.sgroup.qq.com/v2/groups/{group_openid}/messages"
-    headers = {
-        "Authorization": f"QQBot {authorize()}"
-    }
-
-    payload = {"content": content, "msg_type": 0}
-
-    requests.post(url, headers=headers, json=payload)
 
 def generate_respond():
-    global message_history
-
     system_prompt = """
 <general>
 你是一个qq机器人，你的名字叫“都报”，你需要输出短句，尽可能表演的像在qq群里聊天的人类，对用户问题做出回复
@@ -93,29 +36,98 @@ def generate_respond():
 - ”@Rantindom机器人“是在@你
 </reference>
 """.strip()
-    
+
     try:
-        conversation = [{"role": "user", "content": f"{entry["username"]}说:\n```\n{entry["content"]}\n```"} if entry["username"] != "🦄🦄🦄🦄🦄都报" else {"role": "assistant", "content": entry["content"]} for entry in message_history]
+        conversation = [
+            {
+                "role": "user",
+                "content": f"{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}说:\n```\n{entry['content']}\n```{f'\n消息有图片附件，描述为\n{entry["image_description"]}' if entry['image_description'] else ''}",
+            }
+            if entry["username"] != "🦄🦄🦄🦄🦄都报"
+            else {"role": "assistant", "content": entry["content"]}
+            for entry in message_history
+        ]
 
         response = aiclient.chat.completions.create(
             messages=[{"role": "system", "content": system_prompt}] + conversation,
             model="deepseek-v4-flash",
             max_completion_tokens=50,
-            extra_body={"enable_thinking": False, "enable_search": True}
+            extra_body={"enable_thinking": False, "enable_search": True},
         )
 
         return response.choices[0].message.content
-    
+
     except openai.BadRequestError:
         return "有人说怪话，上文清了"
 
-def append_history(username, content):
-    message_history.append({"username": username, "content": content})
+
+def respond_or_not():
+    system_prompt = """你是qq机器人，你的名字是“都报”，但你不负责回答用户，你需要根据输入上文，判断是否成员正在找你，需要你说话
+只输出True或False，True代表需要说话，False代表不需要说话
+输入中”都报(你)“是机器人输出，其余与此名字不相同的名字均为群成员
+
+常见的需要你说话的特征为:
+- 成员输入内容直接提到”都报“或”@Rantindom机器人“，如”都报都报，你好“、”@Rantindom机器人 你可以骂深海渔民吗“
+- 上文满足“成员输入内容直接提到”都报“或”<@Rantindom机器人>“”但当前话题尚未完成。若当前话题尚未完成但上文已没有“都报”或“<@Rantindom机器人>”字样则需判定为不需要说话
+
+常见的不需要你说话的特征为:
+- 有成员明确需要你闭嘴
+"""
+
+    conversation = "\n\n---\n\n".join(
+        f"{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}说:\n```\n{entry['content']}\n```{f'\n消息有图片附件，描述为\n{entry["image_description"]}' if entry['image_description'] else ''}"
+        for entry in message_history
+    )
+
+    response = aiclient.chat.completions.create(
+        model="deepseek-v4-flash",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": conversation},
+        ],
+        extra_body={"enable_thinking": False},
+    )
+
+    print(conversation)
+    print(f"返回{response.choices[0].message.content}")
+
+    return response.choices[0].message.content in ("true", "True")
+
+
+def get_image_description(text, urls):
+    system_prompt = "你需要根据文字输入，描述图片内容。“根据文字输入”意思是，如果文字输入中有特别指定的内容，则需重点描述图片对应部分，如果没有文字输入或无聚焦点，正常描述。文字输入来自社交媒体。如输入“看这个落日”则描述图片中的落日；如果图片中没有落日，即用户指着不是落日的图片说看这落日，需如实描述图片内容而非编造文字指定内容。如输入“啊这”，无任何聚焦，则正常描述图片内容即可，无须特别聚焦于某一区域。若输入多张图片，则每张图片都需要分别描述"
+    user_prompt = f"根据文字输入:\n{text}\n描述图片内容"
+
+    respond = aiclient.chat.completions.create(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": user_prompt}]
+                + [{"type": "image_url", "image_url": {"url": url}} for url in urls],
+            },
+        ],
+        model="qwen3.7-plus",
+    )
+
+    return respond.choices[0].message.content
+
+
+def append_history(username, content, image_description):
+    message_history.append(
+        {
+            "username": username,
+            "content": content,
+            "image_description": image_description,
+        }
+    )
+
     if len(message_history) > 20:
         message_history.pop(0)
 
+
 def replace_at(content, mentions):
-    pattern = re.compile(r'<@([A-Za-z0-9]{32})>')
+    pattern = re.compile(r"<@([A-Za-z0-9]{32})>")
     names = {}
 
     for user in mentions:
@@ -123,108 +135,113 @@ def replace_at(content, mentions):
 
     def replace_at(m):
         id = m.group(1)
-        return f"@{names[id]}"
+        return f"<@{names[id]}>"
 
     content = pattern.sub(replace_at, content)
-    print(content)
 
     return content
 
-def respond_or_not():
-    global message_history
 
-    system_prompt = """你是qq机器人，你的名字是“都报”，但你不负责回答用户，你需要根据输入上文，判断是否成员正在找你，需要你说话
-只输出True或False，True代表需要说话，False代表不需要说话
-输入中”都报(你)“是机器人输出，其余与此名字不相同的名字均为群成员
+def replace_face(content):
+    pattern = re.compile(r'<faceType=1,faceId="(\d+)",ext="([^"]*)">')
 
-常见的需要你说话的特征为:
-- 成员输入内容直接提到”都报“或”@Rantindom机器人“，如”都报都报，你好“、”@Rantindom机器人 你可以骂深海渔民吗“
-- 上文满足“成员输入内容直接提到”都报“或”@Rantindom机器人“”但当前话题尚未完成。若当前话题尚未完成但上文已没有“都报”或“@Rantindom机器人”字样则需判定为不需要说话
+    def replace_at(m):
+        facename = json.loads(base64.b64decode(m.group(2)).decode("utf-8"))["text"]
 
-常见的不需要你说话的特征为:
-- 有成员明确需要你闭嘴
-""" 
+        return f"[表情符号:{facename}]"
 
-    conversation = "\n\n---\n\n".join(f"{entry["username"] if entry["username"] != "🦄🦄🦄🦄🦄都报" else "都报"}说:\n```\n{entry["content"]}\n```" for entry in message_history)
+    content = pattern.sub(replace_at, content)
 
-    response = aiclient.chat.completions.create(
-        model="deepseek-v4-flash",
-        messages=[{"role": "system", "content": system_prompt},
-                  {"role": "user", "content": conversation}],
-        extra_body={"enable_thinking": False}
-        )
-    
-    print(conversation)
-    print(f"返回{response.choices[0].message.content}")
+    content = content.replace(
+        '<faceType=6,faceId="0",ext="eyJ0ZXh0IjoiIn0=">', "[图片]"
+    )
 
-    return response.choices[0].message.content in ("true", "True")
+    return content
 
 
-@app.post('/')
-async def main(request: Request):
-    payload = await request.json()
-    print(payload)
+class Callbacks(QQCallbacks):
+    def __init__(self):
+        self.last_message_id = None
 
-    op = payload["op"]
-    d = payload["d"]
+    def when_get_dc_message(self, message):
+        if message["author"]["user_openid"] == "27DA648A3E34BFA565FBC1813151AA07":
+            client.group.send_message(
+                message["author"]["user_openid"],
+                message["content"],
+            )
 
-    match op:
-        case 0:
-            id = payload["id"]
-            t = payload["t"]
+    def when_get_group_message(self, message):
+        content = replace_at(message["content"], message.get("mentions", []))
+        content = replace_face(message["content"])
 
-            if id in previous_message_id:
-                return 0
-            else:
-                previous_message_id.append(id)
+        image_description = None
+        image_urls = []
+        for entry in message["attachments"]:
+            image_urls.append(entry["url"])
 
-            if t == "C2C_MESSAGE_CREATE" and d["author"]["user_openid"] == "27DA648A3E34BFA565FBC1813151AA07":
-                print(d)
-                print(f"收到私信: {d["content"]}")
-                send_to_group("95B974CA59C598B7F4088290C3EA7DC9", d["content"])
-                return 0
+        if image_urls:
+            image_description = get_image_description(content, image_urls)
 
-            elif t == "GROUP_MESSAGE_CREATE" and d["group_id"] == "95B974CA59C598B7F4088290C3EA7DC9":
-                id = d["author"]["member_openid"]
-                username = d["author"]["username"]
-                content = d["content"]
-                reference = d["parallel_message"]["msg_nodes"][0]["content"] if "parallel_message" in d else ""
-                mentions = d["mentions"] if "mentions" in d else []
+        with sqlite3.connect("./data.db") as conn:
+            cursor = conn.cursor()
 
-                content = replace_at(content, mentions)
+            cursor.execute(
+                "SELECT COUNT(*) FROM users WHERE id = ?;",
+                (message["author"]["member_openid"],),
+            )
+            count = cursor.fetchone()
+            if count[0] == 0:
+                cursor.execute(
+                    "INSERT INTO users (id, chat) VALUES (?, ?)",
+                    (message["author"]["member_openid"], 1),
+                )
 
-                with sqlite3.connect('./data.db') as conn:
-                    cursor = conn.cursor()
+            if "🦄🦄🦄🦄🦄忽略我" in content:
+                cursor.execute(
+                    "UPDATE users SET chat = 0 WHERE id = ?",
+                    (message["author"]["member_openid"],),
+                )
+                client.group.send_message(
+                    "95B974CA59C598B7F4088290C3EA7DC9",
+                    f"听不见你说话了，{message['author']['username']}",
+                    message["id"],
+                )
 
-                    cursor.execute('SELECT COUNT(*) FROM users WHERE id = ?;', (id,))
-                    count = cursor.fetchone()
-                    if count[0] == 0:
-                        cursor.execute('INSERT INTO users (id, chat) VALUES (?, ?)', (id, 1))
-
-                    if "🦄🦄🦄🦄🦄忽略我" in content:
-                        cursor.execute('UPDATE users SET chat = 0 WHERE id = ?', (id,))
-                        send_to_group("95B974CA59C598B7F4088290C3EA7DC9", f"听不见你说话了，{username}")
-
-                    if "🦄🦄🦄🦄🦄听我说" in content:
-                        cursor.execute('UPDATE users SET chat = 1 WHERE id = ?', (id,))
-                        send_to_group("95B974CA59C598B7F4088290C3EA7DC9", f"听见你了，{username}")
-
-                    cursor.execute('SELECT chat FROM users WHERE id = ?', (id,))
-                    chat_or_not = bool(cursor.fetchone()[0])
-
-                    if chat_or_not:
-                        if respond_or_not():
-                            append_history(username, f"{content}{f"\n(附带上文引用内容：\n{reference}\n)" if "parallel_message" in d else ""}")
-                            send_to_group("95B974CA59C598B7F4088290C3EA7DC9", generate_respond())
-
-                    else:
-                        append_history("unknown", f"（此条信息发送者决定不让你看他的消息）")
+            elif "🦄🦄🦄🦄🦄听我说" in content:
+                cursor.execute(
+                    "UPDATE users SET chat = 1 WHERE id = ?",
+                    (message["author"]["member_openid"],),
+                )
+                client.group.send_message(
+                    "95B974CA59C598B7F4088290C3EA7DC9",
+                    f"听见你了，{message['author']['username']}",
+                    message["id"],
+                )
 
             else:
-                pass
+                cursor.execute(
+                    "SELECT chat FROM users WHERE id = ?",
+                    (message["author"]["member_openid"],),
+                )
+                chat_or_not = bool(cursor.fetchone()[0])
 
-        case 13:
-            #绑定webhook
-            response = generate_signature(d)
+                if chat_or_not:
+                    append_history(
+                        message["author"]["username"],
+                        f"{content}{f'\n(附带上文引用内容：\n{message["quote"]["content"]}\n)' if message['quote']['content'] else ''}",
+                        image_description,
+                    )
 
-            return response
+                    if respond_or_not():
+                        respond = generate_respond()
+                        append_history("🦄🦄🦄🦄🦄都报", respond, None)
+                        return respond
+
+                else:
+                    append_history(
+                        "unknown", "（此条信息发送者决定不让你看他的消息）", None
+                    )
+
+
+client = QQClient(appid, appsecret, 3702, Callbacks())
+client.run()
