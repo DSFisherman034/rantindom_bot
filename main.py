@@ -41,7 +41,7 @@ def generate_respond():
         conversation = [
             {
                 "role": "user",
-                "content": f"{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}说:\n```\n{entry['content']}\n```{f'\n消息有图片附件，描述为\n{entry["image_description"]}' if entry['image_description'] else ''}",
+                "content": f"{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}说:\n```\n{entry['content']}\n```{f'\n消息有图片附件，描述为\n{entry["image_description"]}\n发言时间：{entry["time"]}' if entry['image_description'] else ''}",
             }
             if entry["username"] != "🦄🦄🦄🦄🦄都报"
             else {"role": "assistant", "content": entry["content"]}
@@ -75,7 +75,7 @@ def respond_or_not():
 """
 
     conversation = "\n\n---\n\n".join(
-        f"{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}说:\n```\n{entry['content']}\n```{f'\n消息有图片附件，描述为\n{entry["image_description"]}' if entry['image_description'] else ''}"
+        f"{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}说:\n```\n{entry['content']}\n```{f'\n消息有图片附件，描述为\n{entry["image_description"]}' if entry['image_description'] else ''}\n发言时间：{entry["time"]}"
         for entry in message_history
     )
 
@@ -108,17 +108,19 @@ def get_image_description(text, urls):
             },
         ],
         model="qwen3.7-plus",
+        extra_body={"enable_thinking": False}
     )
 
     return respond.choices[0].message.content
 
 
-def append_history(username, content, image_description):
+def append_history(username, content, image_description, time):
     message_history.append(
         {
             "username": username,
             "content": content,
             "image_description": image_description,
+            "time": time
         }
     )
 
@@ -230,16 +232,17 @@ class Callbacks(QQCallbacks):
                         message["author"]["username"],
                         f"{content}{f'\n(附带上文引用内容：\n{message["quote"]["content"]}\n)' if message['quote']['content'] else ''}",
                         image_description,
+                        message["timestamp"]
                     )
 
                     if respond_or_not():
                         respond = generate_respond()
-                        append_history("🦄🦄🦄🦄🦄都报", respond, None)
+                        append_history("🦄🦄🦄🦄🦄都报", respond, None, message["timestamp"])
                         return respond
 
                 else:
                     append_history(
-                        "unknown", "（此条信息发送者决定不让你看他的消息）", None
+                        "unknown", "（此条信息发送者决定不让你看他的消息）", None, message["timestamp"]
                     )
 
 
