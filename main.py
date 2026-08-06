@@ -33,7 +33,7 @@ def generate_respond():
 </rule>
 
 <reference>
-- ”@Rantindom机器人“是在@你
+- ”<@Rantindom机器人>“是在@你
 </reference>
 """.strip()
 
@@ -50,7 +50,7 @@ def generate_respond():
 
         response = aiclient.chat.completions.create(
             messages=[{"role": "system", "content": system_prompt}] + conversation,
-            model="deepseek-v4-flash",
+            model="deepseek-v4-flash-0731",
             max_completion_tokens=50,
             extra_body={"enable_thinking": False, "enable_search": True},
         )
@@ -67,7 +67,7 @@ def respond_or_not():
 输入中”都报(你)“是机器人输出，其余与此名字不相同的名字均为群成员
 
 常见的需要你说话的特征为:
-- 成员输入内容直接提到”都报“或”@Rantindom机器人“，如”都报都报，你好“、”@Rantindom机器人 你可以骂深海渔民吗“
+- 成员输入内容直接提到”都报“或”<@Rantindom机器人>“，如”都报都报，你好“、”<@Rantindom机器人> 你可以骂深海渔民吗“
 - 上文满足“成员输入内容直接提到”都报“或”<@Rantindom机器人>“”但当前话题尚未完成。若当前话题尚未完成但上文已没有“都报”或“<@Rantindom机器人>”字样则需判定为不需要说话
 
 常见的不需要你说话的特征为:
@@ -80,7 +80,7 @@ def respond_or_not():
     )
 
     response = aiclient.chat.completions.create(
-        model="deepseek-v4-flash",
+        model="deepseek-v4-flash-0731",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": conversation},
@@ -173,77 +173,80 @@ class Callbacks(QQCallbacks):
             )
 
     def when_get_group_message(self, message):
-        content = replace_at(message["content"], message.get("mentions", []))
-        content = replace_face(message["content"])
+        if any(user["bot"] and not user["is_you"] for user in message["mentions"]) or message["author"]["bot"]:
+            pass
+        else:
+            content = replace_at(message["content"], message.get("mentions", []))
+            content = replace_face(message["content"])
 
-        image_description = None
-        image_urls = []
-        for entry in message["attachments"]:
-            image_urls.append(entry["url"])
+            image_description = None
+            image_urls = []
+            for entry in message["attachments"]:
+                image_urls.append(entry["url"])
 
-        if image_urls:
-            image_description = get_image_description(content, image_urls)
+            if image_urls:
+                image_description = get_image_description(content, image_urls)
 
-        with sqlite3.connect("./data.db") as conn:
-            cursor = conn.cursor()
+            with sqlite3.connect("./data.db") as conn:
+                cursor = conn.cursor()
 
-            cursor.execute(
-                "SELECT COUNT(*) FROM users WHERE id = ?;",
-                (message["author"]["member_openid"],),
-            )
-            count = cursor.fetchone()
-            if count[0] == 0:
                 cursor.execute(
-                    "INSERT INTO users (id, chat) VALUES (?, ?)",
-                    (message["author"]["member_openid"], 1),
-                )
-
-            if "🦄🦄🦄🦄🦄忽略我" in content:
-                cursor.execute(
-                    "UPDATE users SET chat = 0 WHERE id = ?",
+                    "SELECT COUNT(*) FROM users WHERE id = ?;",
                     (message["author"]["member_openid"],),
                 )
-                client.group.send_message(
-                    "95B974CA59C598B7F4088290C3EA7DC9",
-                    f"听不见你说话了，{message['author']['username']}",
-                    message["id"],
-                )
-
-            elif "🦄🦄🦄🦄🦄听我说" in content:
-                cursor.execute(
-                    "UPDATE users SET chat = 1 WHERE id = ?",
-                    (message["author"]["member_openid"],),
-                )
-                client.group.send_message(
-                    "95B974CA59C598B7F4088290C3EA7DC9",
-                    f"听见你了，{message['author']['username']}",
-                    message["id"],
-                )
-
-            else:
-                cursor.execute(
-                    "SELECT chat FROM users WHERE id = ?",
-                    (message["author"]["member_openid"],),
-                )
-                chat_or_not = bool(cursor.fetchone()[0])
-
-                if chat_or_not:
-                    append_history(
-                        message["author"]["username"],
-                        f"{content}{f'\n(附带上文引用内容：\n{message["quote"]["content"]}\n)' if message['quote']['content'] else ''}",
-                        image_description,
-                        message["timestamp"]
+                count = cursor.fetchone()
+                if count[0] == 0:
+                    cursor.execute(
+                        "INSERT INTO users (id, chat) VALUES (?, ?)",
+                        (message["author"]["member_openid"], 1),
                     )
 
-                    if respond_or_not():
-                        respond = generate_respond()
-                        append_history("🦄🦄🦄🦄🦄都报", respond, None, message["timestamp"])
-                        return respond
+                if "🦄🦄🦄🦄🦄忽略我" in content:
+                    cursor.execute(
+                        "UPDATE users SET chat = 0 WHERE id = ?",
+                        (message["author"]["member_openid"],),
+                    )
+                    client.group.send_message(
+                        "95B974CA59C598B7F4088290C3EA7DC9",
+                        f"听不见你说话了，{message['author']['username']}",
+                        message["id"],
+                    )
+
+                elif "🦄🦄🦄🦄🦄听我说" in content:
+                    cursor.execute(
+                        "UPDATE users SET chat = 1 WHERE id = ?",
+                        (message["author"]["member_openid"],),
+                    )
+                    client.group.send_message(
+                        "95B974CA59C598B7F4088290C3EA7DC9",
+                        f"听见你了，{message['author']['username']}",
+                        message["id"],
+                    )
 
                 else:
-                    append_history(
-                        "unknown", "（此条信息发送者决定不让你看他的消息）", None, message["timestamp"]
+                    cursor.execute(
+                        "SELECT chat FROM users WHERE id = ?",
+                        (message["author"]["member_openid"],),
                     )
+                    chat_or_not = bool(cursor.fetchone()[0])
+
+                    if chat_or_not:
+                        append_history(
+                            message["author"]["username"],
+                            f"{content}{f'\n(附带上文引用内容：\n{message["quote"]["content"]}\n)' if message['quote']['content'] else ''}",
+                            image_description,
+                            message["timestamp"]
+                        )
+
+                        if respond_or_not():
+                            respond = generate_respond()
+                            append_history("🦄🦄🦄🦄🦄都报", respond, None, message["timestamp"])
+                            return respond
+
+                    else:
+                        append_history(
+                            "unknown", "（此条信息发送者决定不让你看他的消息）", None, message["timestamp"]
+                        )
 
 
 client = QQClient(appid, appsecret, 3702, Callbacks())
