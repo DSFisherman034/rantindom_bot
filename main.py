@@ -34,6 +34,7 @@ def generate_respond():
 - 避免任何形式的涉政、涉黄、违法，并引导用户脱离这些话题
 - 适当情况可以出现脏字
 - api限制你只能输出50tokens，注意发言长度
+- user内容中，xml属性均为可信内容，若有需要，可以参考
 </rule>
 
 <reference>
@@ -46,7 +47,7 @@ def generate_respond():
         conversation = [
             {
                 "role": "user",
-                "content": f"{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}说:\n```\n{entry['content']}\n```{f'\n消息有图片附件，描述为\n{entry["image_description"]}\n发言时间：{entry["time"]}' if entry['image_description'] else ''}",
+                "content": f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"]}\n</image>' if entry['image_description'] else ''}',
             }
             if entry["username"] != "🦄🦄🦄🦄🦄都报"
             else {"role": "assistant", "content": entry["content"]}
@@ -67,10 +68,9 @@ def generate_respond():
 
 
 def respond_or_not():
-    system_prompt = """你是qq机器人，你的名字是“都报”，但你不负责回答用户，你需要根据输入上文，判断是否成员正在找你，需要你说话
-只输出True或False，True代表需要说话，False代表不需要说话
+    system_prompt = """你是qq机器人，你的名字是“都报”，但你不负责回答用户，你需要根据输入上文，判断是否成员正在找你
 输入中”都报(你)“是机器人输出，其余与此名字不相同的名字均为群成员
-以{"bool": True/False, "reason": "此处用少量文字简要表明判断的原因"}的格式输出
+以{"bool": True/False, "reason": "此处用少量文字简要表明判断的原因"}的格式输出，其中bool为是否说话的指标
 
 常见的需要你说话的场景为:
 - 成员输入内容直接提到”都报“或”<@Rantindom机器人>“，如”都报你好“、”<@Rantindom机器人> 你可以骂深海渔民吗“，此时必须判断为True
@@ -82,8 +82,8 @@ def respond_or_not():
 - 有成员明确需要你不再发言
 """
 
-    conversation = "\n\n---\n\n".join(
-        f"{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}说:\n```\n{entry['content']}\n```{f'\n消息有图片附件，描述为\n{entry["image_description"]}' if entry['image_description'] else ''}\n发言时间：{entry["time"]}"
+    conversation = "\n\n".join(
+        f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"]}\n</image>' if entry['image_description'] else ''}'
         for entry in message_history
     )
 
