@@ -55,7 +55,7 @@ def generate_respond():
 
         response = aiclient.chat.completions.create(
             messages=[{"role": "system", "content": system_prompt}] + conversation,
-            model="deepseek-v4-flash-0731",
+            model="deepseek-v4-flash",
             max_completion_tokens=50,
             extra_body={"enable_thinking": False, "enable_search": True},
         )
@@ -70,11 +70,13 @@ def respond_or_not():
     system_prompt = """你是qq机器人，你的名字是“都报”，但你不负责回答用户，你需要根据输入上文，判断是否成员正在找你，需要你说话
 只输出True或False，True代表需要说话，False代表不需要说话
 输入中”都报(你)“是机器人输出，其余与此名字不相同的名字均为群成员
+以{"bool": True/False, "reason": "此处用少量文字简要表明判断的原因"}的格式输出
 
 常见的需要你说话的场景为:
-- 成员输入内容直接提到”都报“或”<@Rantindom机器人>“，如”都报你好“、”<@Rantindom机器人> 你可以骂深海渔民吗“，则必须判断为True
-- 上文满足“成员输入内容直接提到”都报“或”<@Rantindom机器人>“”且当前话题尚未完成
+- 成员输入内容直接提到”都报“或”<@Rantindom机器人>“，如”都报你好“、”<@Rantindom机器人> 你可以骂深海渔民吗“，此时必须判断为True
 - 上文“都报”与其他用户的交流尚未完结
+- “都报”参与了上文话题，此时用户对上文话题做补充或追问
+- 用户提出了一个问题，而机器人搭载的ai可能知道答案
 
 常见的不需要你说话的场景为:
 - 有成员明确需要你不再发言
@@ -85,19 +87,28 @@ def respond_or_not():
         for entry in message_history
     )
 
-    response = aiclient.chat.completions.create(
-        model="deepseek-v4-flash-0731",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": conversation},
-        ],
-        extra_body={"enable_thinking": False},
-    )
+    for _ in range(3):
+        response = aiclient.chat.completions.create(
+            model="deepseek-v4-flash-0731",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": conversation},
+            ],
+            extra_body={"enable_thinking": True},
+        )
 
-    print(conversation)
-    print(f"返回{response.choices[0].message.content}")
+        try:
+            result = json.loads(response.choices[0].message.content)
 
-    return response.choices[0].message.content in ("true", "True")
+            print(conversation)
+            print(result)
+            print(f"返回{result["bool"]}，因为{result["reason"]}")
+            
+            return result["bool"]
+        except:
+            pass
+
+    return False
 
 
 def get_image_description(text, urls):
@@ -166,6 +177,11 @@ def replace_face(content):
 
     return content
 
+def replace_time(content):
+    m = re.search(r'(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)\+08:00', content)
+
+    return f"{m.group(1)}年{m.group(2)}月{m.group(3)}日 {m.group(4)}:{m.group(5)}"
+
 
 class Callbacks(QQCallbacks):
     def __init__(self):
@@ -183,7 +199,7 @@ class Callbacks(QQCallbacks):
             pass
         else:
             content = replace_at(message["content"], message.get("mentions", []))
-            content = replace_face(message["content"])
+            content = replace_face(content)
 
             image_description = None
             image_urls = []
@@ -241,17 +257,17 @@ class Callbacks(QQCallbacks):
                             message["author"]["username"],
                             f"{content}{f'\n(附带上文引用内容：\n{message["quote"]["content"]}\n)' if message['quote']['content'] else ''}",
                             image_description,
-                            message["timestamp"]
+                            replace_time(message["timestamp"])
                         )
 
                         if respond_or_not():
                             respond = generate_respond()
-                            append_history("🦄🦄🦄🦄🦄都报", respond, None, message["timestamp"])
+                            append_history("🦄🦄🦄🦄🦄都报", respond, None, replace_time(message["timestamp"]))
                             return respond
 
                     else:
                         append_history(
-                            "unknown", "（此条信息发送者决定不让你看他的消息）", None, message["timestamp"]
+                            "unknown", "（此条信息发送者决定不让你看他的消息）", None, replace_time(message["timestamp"])
                         )
 
 
