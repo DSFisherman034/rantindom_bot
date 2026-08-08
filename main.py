@@ -5,6 +5,7 @@ import sqlite3
 import re
 import json
 import base64
+import requests
 
 appid = "***REMOVED***"
 appsecret = "***REMOVED***"
@@ -182,6 +183,35 @@ def replace_time(content):
 
     return f"{m.group(1)}年{m.group(2)}月{m.group(3)}日 {m.group(4)}:{m.group(5)}"
 
+def replace_bilibili_ark(content):
+    headers = {
+        'User-Agent': 'curl/8.18.0'
+    }
+    
+    m = re.search(r'jump_url:\s*(\S+)', content)
+
+    if m:
+        url = m.group(1)
+
+        print(f"将要访问: {url}")
+
+        headers = {
+            'User-Agent': 'curl/8.18.0'
+        }
+
+        content = requests.get(url, headers=headers, allow_redirects=False).text
+        m = re.search(r'<a href="https://www.bilibili.com/video/([\s\S]*?)\?([\s\S]*?)">Found</a>', content)
+
+        if m:
+            bvid = m.group(1)
+            detail = requests.get(f'https://api.bilibili.com/x/web-interface/view?bvid={bvid}', headers=headers, allow_redirects=False).json()
+            print(detail)
+
+            return f"<bilibili视频卡片>\n视频数据:\n - 视频标题:{detail["data"]["title"]}\n - 简介:{detail["data"]["desc"]}\n - 时长:{detail["data"]["duration"]}秒\n - up主:{detail["data"]["owner"]["name"]}\n - 播放量:{detail["data"]["stat"]["view"]}\n - 点赞量:{detail["data"]["stat"]["like"]}\n - 投币量:{detail["data"]["stat"]["coin"]}\n - 收藏量:{detail["data"]["stat"]["favorite"]}\n - 转发量:{detail["data"]["stat"]["share"]}\n - 弹幕量:{detail["data"]["stat"]["danmaku"]}\n - 评论量:{detail["data"]["stat"]["reply"]}\n</bilibili视频卡片>"
+        
+        return "<一个未知的bilibili视频>"
+    return content
+
 
 class Callbacks(QQCallbacks):
     def __init__(self):
@@ -200,6 +230,7 @@ class Callbacks(QQCallbacks):
         else:
             content = replace_at(message["content"], message.get("mentions", []))
             content = replace_face(content)
+            content = replace_bilibili_ark(content)
 
             image_description = None
             image_urls = []
