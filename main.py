@@ -20,7 +20,8 @@ aiclient = openai.OpenAI(
 )
 
 message_history = []
-new_message_time = 1e10
+scheduled_message_time = 1e10
+last_bot_message_time = 1e10
 
 
 def generate_respond():
@@ -216,13 +217,20 @@ def replace_bilibili_ark(content):
     return content
 
 def repeated_main():
-    global new_message_time
+    global scheduled_message_time
+    global last_bot_message_time
     while True:
-        if new_message_time <= time.time() and respond_or_not():
+        if (
+        (scheduled_message_time <= time.time()  # 到10秒冷却的发言时间了
+        or 
+        (scheduled_message_time >= time.time() and scheduled_message_time <= time.time() - 10 and last_bot_message_time <= time.time() - 60)    # 没到10秒冷却的发言时间，且确实有人发言而不是1e10太远，但机器人已经60秒没插过嘴了
+        )
+        and respond_or_not()):
             respond = generate_respond()
             append_history("🦄🦄🦄🦄🦄都报", respond, None, time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
             client.group.send_message(group_id, respond)
-            new_message_time = 1e10
+            scheduled_message_time = 1e10
+            last_bot_message_time = time.time()
 
         time.sleep(0.5)
 
@@ -305,8 +313,8 @@ class Callbacks(QQCallbacks):
                             replace_time(message["timestamp"])
                         )
 
-                        global new_message_time
-                        new_message_time = time.time() + (10 if "都报" not in message["content"] and "<@Rantindom机器人>" not in message["content"] else 0)
+                        global scheduled_message_time
+                        scheduled_message_time = time.time() + (10 if "都报" not in message["content"] and "<@Rantindom机器人>" not in message["content"] else 0)
 
                     else:
                         append_history(
