@@ -19,8 +19,9 @@ aiclient = openai.OpenAI(
     base_url="unknown",
 )
 
-time_interval_since_last_message = 20
-max_time_interval_since_last_message = 120
+time_interval_since_last_message = 20   #人类用户发言这么多秒后决策一次机器人是否发言
+max_time_interval_since_last_message = 120  # 如果一直有人发言，这么多秒后机器人插不上嘴，则强制决策一次是否插嘴
+id_number = 5   # 通过username(id的前id_number位)区分同名用户
 
 message_history = []
 scheduled_message_time = 1e10
@@ -47,7 +48,8 @@ def generate_respond():
 
 <reference>
 - ”<@Rantindom机器人>“是在@你
-- 用户输入内容中”深海鱼民“和”深海渔民“是同一人，”深海鱼“不是。用户名仅“深海渔民”是深海渔民，深海愚民、深海鱼民、琛海渔民等同音或形近字均不是深海渔民本人
+- 用户输入内容中”深海鱼民“和”深海渔民“是同一人，”深海鱼“不是。用户名仅“深海渔民(27DA6)”是深海渔民，深海愚民、深海鱼民、琛海渔民等同音或形近字均不是深海渔民本人
+- author名字固定格式为“username(id)“以辅助区分，username相同但id不同应当被理解为不同但同名的用户。通过author给出的名字称呼用户时，不要输出括号和其中的id，只使用括号外的username
 </reference>
 """.strip()
 
@@ -291,7 +293,7 @@ class Callbacks(QQCallbacks):
                         (message["author"]["member_openid"],),
                     )
                     client.group.send_message(
-                        "95B974CA59C598B7F4088290C3EA7DC9",
+                        group_id,
                         f"听不见你说话了，{message['author']['username']}",
                         message["id"],
                     )
@@ -302,7 +304,7 @@ class Callbacks(QQCallbacks):
                         (message["author"]["member_openid"],),
                     )
                     client.group.send_message(
-                        "95B974CA59C598B7F4088290C3EA7DC9",
+                        group_id,
                         f"听见你了，{message['author']['username']}",
                         message["id"],
                     )
@@ -316,7 +318,7 @@ class Callbacks(QQCallbacks):
 
                     if chat_or_not:
                         append_history(
-                            message["author"]["username"],
+                            f"{message["author"]["username"]}({message["author"]["member_openid"][:id_number]})",
                             f"{content}{f'\n(附带上文引用内容：\n{message["quote"]["content"]}\n)' if message['quote']['content'] else ''}",
                             image_urls,
                             replace_time(message["timestamp"])
