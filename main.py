@@ -19,6 +19,9 @@ aiclient = openai.OpenAI(
     base_url="unknown",
 )
 
+time_interval_since_last_message = 20
+max_time_interval_since_last_message = 120
+
 message_history = []
 scheduled_message_time = 1e10
 last_bot_message_time = 1e10
@@ -52,7 +55,7 @@ def generate_respond():
         conversation = [
             {
                 "role": "user",
-                "content": f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"]}\n</image>' if entry['image_description'] else ''}',
+                "content": f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}',
             }
             if entry["username"] != "🦄🦄🦄🦄🦄都报"
             else {"role": "assistant", "content": entry["content"]}
@@ -89,7 +92,7 @@ def respond_or_not():
 """
 
     conversation = "\n\n".join(
-        f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"]}\n</image>' if entry['image_description'] else ''}'
+        f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}'
         for entry in message_history
     )
 
@@ -138,9 +141,10 @@ def get_image_description(text, urls):
 
 
 def append_history(username, content, image_description, time):
-    if message_history[-1]["username"] == username:
+    if len(message_history) >= 1 and message_history[-1]["username"] == username:
         message_history[-1]["content"] += (f"\n{content}" if content else "")
-        message_history[-1]["image_description"] += (f"\n{image_description}" if image_description else "")
+        message_history[-1]["image_description"] += image_description
+
     else:
         message_history.append(
             {
@@ -226,11 +230,15 @@ def repeated_main():
     global last_bot_message_time
     while True:
         if (
-        (scheduled_message_time <= time.time()  # 到10秒冷却的发言时间了
+        (scheduled_message_time <= time.time()  # 到time_interval_since_last_message秒冷却的发言时间了
         or 
-        (scheduled_message_time >= time.time() and scheduled_message_time <= time.time() - 10 and last_bot_message_time <= time.time() - 60)    # 没到10秒冷却的发言时间，且确实有人发言而不是1e10太远，但机器人已经60秒没插过嘴了
+        (scheduled_message_time >= time.time() and scheduled_message_time <= time.time() - time_interval_since_last_message and last_bot_message_time <= time.time() - max_time_interval_since_last_message)    # 没到time_interval_since_last_message秒冷却的发言时间，且确实有人发言而不是1e10太远，但机器人已经max_time_interval_since_last_message秒没插过嘴了
         )
         and respond_or_not()):
+            for i, message in enumerate(message_history):
+                if message["image_description"] and isinstance(message["image_description"], list) and i != len(message_history) - 1:
+                    message_history[i]["image_description"] = get_image_description(message["content"], message["image_description"])
+
             respond = generate_respond()
             append_history("🦄🦄🦄🦄🦄都报", respond, None, time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
             client.group.send_message(group_id, respond)
@@ -259,13 +267,9 @@ class Callbacks(QQCallbacks):
             content = replace_face(content)
             content = replace_bilibili_ark(content)
 
-            image_description = None
             image_urls = []
             for entry in message["attachments"]:
                 image_urls.append(entry["url"])
-
-            if image_urls:
-                image_description = get_image_description(content, image_urls)
 
             with sqlite3.connect("./data.db") as conn:
                 cursor = conn.cursor()
@@ -314,16 +318,16 @@ class Callbacks(QQCallbacks):
                         append_history(
                             message["author"]["username"],
                             f"{content}{f'\n(附带上文引用内容：\n{message["quote"]["content"]}\n)' if message['quote']['content'] else ''}",
-                            image_description,
+                            image_urls,
                             replace_time(message["timestamp"])
                         )
 
                         global scheduled_message_time
-                        scheduled_message_time = time.time() + (10 if "都报" not in message["content"] and "<@Rantindom机器人>" not in message["content"] else 0)
+                        scheduled_message_time = time.time() + (20 if "都报" not in message["content"] and "<@Rantindom机器人>" not in message["content"] else 0)
 
                     else:
                         append_history(
-                            "unknown", "（此条信息发送者决定不让你看他的消息）", None, replace_time(message["timestamp"])
+                            "unknown", "（此条信息发送者决定不让你看他的消息）", [], replace_time(message["timestamp"])
                         )
 
 t = threading.Thread(target=repeated_main)
