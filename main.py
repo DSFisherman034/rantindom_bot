@@ -85,6 +85,7 @@ def respond_or_not():
 
 常见的不需要你说话的场景为:
 - 有成员明确需要你不再发言
+- 前文用户话没说完
 """
 
     conversation = "\n\n".join(
@@ -117,7 +118,7 @@ def respond_or_not():
 
 
 def get_image_description(text, urls):
-    system_prompt = "你需要根据文字输入，描述图片内容。“根据文字输入”意思是，如果文字输入中有特别指定的内容，则需重点描述图片对应部分，如果没有文字输入或无聚焦点，正常描述。文字输入来自社交媒体。如输入“看这个落日”则描述图片中的落日；如果图片中没有落日，即用户指着不是落日的图片说看这落日，需如实描述图片内容而非编造文字指定内容。如输入“啊这”，无任何聚焦，则正常描述图片内容即可，无须特别聚焦于某一区域。若输入多张图片，则每张图片都需要分别描述"
+    system_prompt = "你需要根据文字输入，描述图片内容。“根据文字输入”意思是，如果文字输入中有特别指定的内容，则需重点描述图片对应部分，如果没有文字输入或无聚焦点，正常描述。文字输入来自社交媒体。如输入“看这个落日”则描述图片中的落日；如果图片中没有落日，即用户指着不是落日的图片说看这落日，需如实描述图片内容而非编造文字指定内容。如输入“啊这”，无任何聚焦，则正常描述图片内容即可，无须特别聚焦于某一区域。若输入多张图片，则每张图片都需要分别描述。不使用md符号，使用单行plaintext"
     user_prompt = f"根据文字输入:\n{text}\n描述图片内容"
 
     respond = aiclient.chat.completions.create(
@@ -137,14 +138,18 @@ def get_image_description(text, urls):
 
 
 def append_history(username, content, image_description, time):
-    message_history.append(
-        {
-            "username": username,
-            "content": content,
-            "image_description": image_description,
-            "time": time
-        }
-    )
+    if message_history[-1]["username"] == username:
+        message_history[-1]["content"] += (f"\n{content}" if content else "")
+        message_history[-1]["image_description"] += (f"\n{image_description}" if image_description else "")
+    else:
+        message_history.append(
+            {
+                "username": username,
+                "content": content,
+                "image_description": image_description,
+                "time": time
+            }
+        )
 
     if len(message_history) > 20:
         message_history.pop(0)
