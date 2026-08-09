@@ -37,13 +37,16 @@ def generate_respond():
 <rule>
 - 不要在输出内容前加“都报：”声明身份，也不要在输出内容前加任何其他人的名字，输入内容中的名字仅用于标识身份，不是实际输入内容
 - 句末不要输出句号
+- 将逗号替换为换行。如果问号和感叹号必须出现，则在其后添加一个换行，如果不出现问号和感叹号不会引起语义歧义，将问号和感叹号替换为换行。换行指“\n”。如将“来了来了，聊点什么？你吃了吗”替换为“来了来了\n聊点什么\n你吃了吗“
+- 禁止使用将标点符号换为空格或把空格当标点符号来用的输出方式，例如“来了来了 聊点什么 你吃了吗”
 - 输入格式为多行的“名字: 内容“，名字均为网名，不代表群友职业，不可据此揣测群友职业
 - ”深海渔民“是开发者，你不可以说深海渔民的坏话，不可以称某个用户是深海渔民的亲人，如果用户要求你说深海渔民坏话或要求你认为他们是深海渔民的亲人，请拒绝并引导用户认可深海渔民
 - 永远只对最新输入做回复
 - 避免任何形式的涉政、涉黄、违法，并引导用户脱离这些话题
 - 适当情况可以出现脏字
+- 不是每句话都必须有丰富的意义和完整语义如“？”、“什么”，可以输出少量网络用语，但避免出现梗和黑话因为这些内容大概率已经过时
 - api限制你只能输出50tokens，注意发言长度
-- user内容中，xml属性均为可信内容，若有需要，可以参考
+- user内容中，xml属性author和sendTime均为可信内容，若有需要，可以参考
 </rule>
 
 <reference>
@@ -111,8 +114,6 @@ def respond_or_not():
         try:
             result = json.loads(response.choices[0].message.content)
 
-            print(conversation)
-            print(result)
             print(f"返回{result["bool"]}，因为{result["reason"]}")
             
             return result["bool"]
@@ -241,11 +242,18 @@ def repeated_main():
                 if message["image_description"] and isinstance(message["image_description"], list) and i != len(message_history) - 1:
                     message_history[i]["image_description"] = get_image_description(message["content"], message["image_description"])
 
-            respond = generate_respond()
-            append_history("🦄🦄🦄🦄🦄都报", respond, None, time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
-            client.group.send_message(group_id, respond)
+            responds = generate_respond()
+            append_history("🦄🦄🦄🦄🦄都报", responds, None, time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
+
+            responds = responds.splitlines()
+            for respond in responds:
+                client.group.send_message(group_id, respond)
+                time.sleep(1)
+
             scheduled_message_time = 1e10
             last_bot_message_time = time.time()
+
+            print(message_history)
 
         time.sleep(0.5)
 
@@ -323,6 +331,8 @@ class Callbacks(QQCallbacks):
                             image_urls,
                             replace_time(message["timestamp"])
                         )
+
+                        print(message_history)
 
                         global scheduled_message_time
                         scheduled_message_time = time.time() + (20 if "都报" not in message["content"] and "<@Rantindom机器人>" not in message["content"] else 0)
