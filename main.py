@@ -6,6 +6,8 @@ import re
 import json
 import base64
 import requests
+import time
+import threading
 
 appid = "***REMOVED***"
 appsecret = "***REMOVED***"
@@ -18,6 +20,7 @@ aiclient = openai.OpenAI(
 )
 
 message_history = []
+new_message_time = 1e10
 
 
 def generate_respond():
@@ -212,6 +215,17 @@ def replace_bilibili_ark(content):
         return "<一个未知的bilibili视频>"
     return content
 
+def repeated_main():
+    global new_message_time
+    while True:
+        if new_message_time <= time.time() and respond_or_not():
+            respond = generate_respond()
+            append_history("🦄🦄🦄🦄🦄都报", respond, None, time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
+            client.group.send_message(group_id, respond)
+            new_message_time = 1e10
+
+        time.sleep(0.5)
+
 
 class Callbacks(QQCallbacks):
     def __init__(self):
@@ -291,16 +305,16 @@ class Callbacks(QQCallbacks):
                             replace_time(message["timestamp"])
                         )
 
-                        if respond_or_not():
-                            respond = generate_respond()
-                            append_history("🦄🦄🦄🦄🦄都报", respond, None, replace_time(message["timestamp"]))
-                            return respond
+                        global new_message_time
+                        new_message_time = time.time() + (10 if "都报" not in message["content"] and "<@Rantindom机器人>" not in message["content"] else 0)
 
                     else:
                         append_history(
                             "unknown", "（此条信息发送者决定不让你看他的消息）", None, replace_time(message["timestamp"])
                         )
 
+t = threading.Thread(target=repeated_main)
+t.start()
 
 client = QQClient(appid, appsecret, 3702, Callbacks())
 client.run()
