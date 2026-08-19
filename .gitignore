@@ -1,5 +1,4 @@
 *.log
 test*
-dc.json
-group.json
 resync.sh
+config.ini

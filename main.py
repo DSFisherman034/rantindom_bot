@@ -9,16 +9,21 @@ import requests
 import time
 import threading
 import uuid
+import configparser
 
-appid = "***REMOVED***"
-appsecret = "***REMOVED***"
+config = configparser.ConfigParser()
+config.read("./config.ini", encoding="utf-8")
 
-group_id = "95B974CA59C598B7F4088290C3EA7DC9"
+appid = config.get("bot", "appid")
+appsecret = config.get("bot", "appsecret")
+group_id = config.get("bot", "group_id")
 
 aiclient = openai.OpenAI(
-    api_key="unknown",
-    base_url="unknown",
+    api_key=config.get("ai", "api_key"),
+    base_url=config.get("ai", "base_url"),
 )
+chat_model = config.get("bot", "chat_model")
+multimodal_model = config.get("bot", "multimodal_model")
 
 time_interval_since_last_message = 20   #人类用户发言这么多秒后决策一次机器人是否发言
 max_time_interval_since_last_message = 120  # 如果一直有人发言，这么多秒后机器人插不上嘴，则强制决策一次是否插嘴
@@ -135,7 +140,7 @@ def generate_respond():
 
         response = aiclient.chat.completions.create(
             messages=[{"role": "system", "content": system_prompt}] + conversation,
-            model="deepseek-v4-flash",
+            model=chat_model,
             max_completion_tokens=200,
             extra_body={"enable_thinking": False, "enable_search": True},
             tools=tools
@@ -186,7 +191,7 @@ def respond_or_not():
 
     for _ in range(3):
         response = aiclient.chat.completions.create(
-            model="deepseek-v4-flash-0731",
+            model=chat_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": conversation},
@@ -219,7 +224,7 @@ def get_image_description(text, urls):
                 + [{"type": "image_url", "image_url": {"url": url}} for url in urls],
             },
         ],
-        model="qwen3.7-plus",
+        model=multimodal_model,
         extra_body={"enable_thinking": False}
     )
 
