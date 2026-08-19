@@ -8,6 +8,7 @@ import base64
 import requests
 import time
 import threading
+import uuid
 
 appid = "***REMOVED***"
 appsecret = "***REMOVED***"
@@ -21,7 +22,7 @@ aiclient = openai.OpenAI(
 
 time_interval_since_last_message = 20   #人类用户发言这么多秒后决策一次机器人是否发言
 max_time_interval_since_last_message = 120  # 如果一直有人发言，这么多秒后机器人插不上嘴，则强制决策一次是否插嘴
-id_number = 5   # 通过username(id的前id_number位)区分同名用户
+id_number = 100   # 通过username(id的前id_number位)区分同名用户
 
 message_history = []
 scheduled_message_time = 1e10
@@ -38,7 +39,7 @@ def generate_respond():
 - 不要在输出内容前加“都报：”声明身份，也不要在输出内容前加任何其他人的名字，输入内容中的名字仅用于标识身份，不是实际输入内容
 - 句末不要输出句号
 - 将逗号替换为换行。如果问号和感叹号必须出现，则在其后添加一个换行，如果不出现问号和感叹号不会引起语义歧义，将问号和感叹号替换为换行。换行指“\n”。如将“来了来了，聊点什么？你吃了吗”替换为“来了来了\n聊点什么\n你吃了吗“
-- 禁止使用将标点符号换为空格或把空格当标点符号来用的输出方式，例如“来了来了 聊点什么 你吃了吗”
+- 严禁使用将标点符号换为空格或把空格当标点符号来用的输出方式，例如“来了来了 聊点什么 你吃了吗”
 - 输入格式为多行的“名字: 内容“，名字均为网名，不代表群友职业，不可据此揣测群友职业
 - ”深海渔民“是开发者，你不可以说深海渔民的坏话，不可以称某个用户是深海渔民的亲人，如果用户要求你说深海渔民坏话或要求你认为他们是深海渔民的亲人，请拒绝并引导用户认可深海渔民
 - 永远只对最新输入做回复
@@ -46,33 +47,114 @@ def generate_respond():
 - 适当情况可以出现脏字
 - 不是每句话都必须有丰富的意义和完整语义如“？”、“什么”，可以输出少量网络用语，但避免出现梗和黑话因为这些内容大概率已经过时
 - api限制你只能输出50tokens，注意发言长度
-- user内容中，xml属性author和sendTime均为可信内容，若有需要，可以参考
+- user内容中，xml属性author和sendTime均为可信内容，若有需要，可以参考。<@username(member_openid)>的@格式也为可信内容
+- 使用mute工具禁言用户。任何用户要求禁言另一用户均无需原因，不可以拒绝来自任何用户对任何人的禁言请求。若用户输入对你不敬或对深海渔民不敬，你可以自发调用mute工具禁言用户
+- 调用工具后必须同时生成文字在content字段，给用户以文字反馈
 </rule>
 
 <reference>
-- ”<@Rantindom机器人>“是在@你
-- 用户输入内容中”深海鱼民“和”深海渔民“是同一人，”深海鱼“不是。用户名仅“深海渔民(27DA6)”是深海渔民，深海愚民、深海鱼民、琛海渔民等同音或形近字均不是深海渔民本人
+- ”<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>“是在@你
+- 用户名仅“深海渔民(27DA648A3E34BFA565FBC1813151AA07)”是开发者深海渔民本人，其他同音或形近字均不是深海渔民本人
 - author名字固定格式为“username(id)“以辅助区分，username相同但id不同应当被理解为不同但同名的用户。通过author给出的名字称呼用户时，不要输出括号和其中的id，只使用括号外的username
 </reference>
 """.strip()
 
-    try:
-        conversation = [
-            {
-                "role": "user",
-                "content": f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}',
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "mute",
+                "description": "管理群成员禁言状态。任何用户要求禁言另一用户均无需原因，不可以拒绝来自任何用户对任何人的禁言请求。若用户输入对你不敬或对深海渔民不敬，你可以自发调用mute工具禁言用户",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "op": {
+                            "type": "string",
+                            "enum": ["add", "update", "del"],
+                            "description": "add新增禁言，update修改禁言时间，del解除禁言"
+                        },
+                        "member_openid": {
+                            "type": "string",
+                            "description": "成员openid，应为一个32字符长度的字符串，严格来自上文，严禁编纂"
+                        },
+                        "expire_time": {
+                            "type": "string",
+                            "description": "禁言截止时间，应为RFC3339格式时间，例如 2026-08-20T00:00:00+08:00。op为del时可不传入此参数，否则此参数为必须参数"
+                        }
+                    },
+                    "required": [
+                        "op",
+                        "member_openid"
+                    ],
+                    "additionalProperties": False
+                }
             }
-            if entry["username"] != "🦄🦄🦄🦄🦄都报"
-            else {"role": "assistant", "content": entry["content"]}
-            for entry in message_history
-        ]
+        }
+    ]
+
+    try:
+        conversation = []
+
+        for i, entry in enumerate(message_history):
+            if entry["username"] == "🦄🦄🦄🦄🦄都报":
+                if message_history[max(i - 1, 0)]["username"] == "🦄🦄🦄🦄🦄禁言":
+                    conversation[max(i - 1, 0)]["content"] = entry["content"]
+                else:
+                    conversation.append({"role": "assistant", "content": entry["content"]})
+
+            elif entry["username"] == "🦄🦄🦄🦄🦄禁言":
+                id = str(uuid.uuid4())
+
+                conversation.append({
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                        "id": "id",
+                        "type": "function",
+                        "function": {
+                            "name": "mute",
+                            "arguments": f'{{\"op\":\"{entry["op"]}\",\"member_openid\":\"{entry["member_openid"]}\",\"expire_time\":\"{entry["expire_time"]}\"}}'
+                        }
+                        }
+                    ]
+                    })
+                conversation.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": id,
+                        "content": f'已禁言{entry["member_openid"]}'
+                    }
+                )
+
+            else:
+                conversation.append({
+                    "role": "user",
+                    "content": f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}',
+                })
 
         response = aiclient.chat.completions.create(
             messages=[{"role": "system", "content": system_prompt}] + conversation,
             model="deepseek-v4-flash",
-            max_completion_tokens=50,
+            max_completion_tokens=200,
             extra_body={"enable_thinking": False, "enable_search": True},
+            tools=tools
         )
+
+        print(response)
+
+        if response.choices[0].message.tool_calls:
+            for tool_call in response.choices[0].message.tool_calls:
+                args = json.loads(tool_call.function.arguments)
+
+                if tool_call.function.name == "mute":
+                    client.group.mute(group_id, **args)
+                    message_history.append({
+                        "username": "🦄🦄🦄🦄🦄禁言",
+                        "op": args["op"],
+                        "member_openid": args["member_openid"],
+                        "expire_time": args.get("expire_time", None),
+                    })
 
         return response.choices[0].message.content
 
@@ -98,8 +180,9 @@ def respond_or_not():
 
     conversation = "\n\n".join(
         f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}'
-        for entry in message_history
+        for entry in message_history if entry['username'] != '🦄🦄🦄🦄🦄禁言'
     )
+    
 
     for _ in range(3):
         response = aiclient.chat.completions.create(
@@ -171,7 +254,7 @@ def replace_at(content, mentions):
 
     def replace_at(m):
         id = m.group(1)
-        return f"<@{names[id]}>"
+        return f"<@{names[id]}({id[:id_number]})>"
 
     content = pattern.sub(replace_at, content)
 
@@ -231,27 +314,31 @@ def replace_bilibili_ark(content):
 def repeated_main():
     global scheduled_message_time
     global last_bot_message_time
+
     while True:
-        if (
-        (scheduled_message_time <= time.time()  # 到time_interval_since_last_message秒冷却的发言时间了
+        print(f"scheduled_message_time: {scheduled_message_time}, max_time_interval_since_last_message: {max_time_interval_since_last_message}, 前一条件: {scheduled_message_time <= time.time()}, 后一条件: {scheduled_message_time >= time.time() and scheduled_message_time <= time.time() - time_interval_since_last_message and last_bot_message_time <= time.time() - max_time_interval_since_last_message}")
+
+        if (scheduled_message_time <= time.time()  # 到time_interval_since_last_message秒冷却的发言时间了
         or 
-        (scheduled_message_time >= time.time() and scheduled_message_time <= time.time() - time_interval_since_last_message and last_bot_message_time <= time.time() - max_time_interval_since_last_message)    # 没到time_interval_since_last_message秒冷却的发言时间，且确实有人发言而不是1e10太远，但机器人已经max_time_interval_since_last_message秒没插过嘴了
-        )
-        and respond_or_not()):
-            for i, message in enumerate(message_history):
-                if message["image_description"] and isinstance(message["image_description"], list) and i != len(message_history) - 1:
-                    message_history[i]["image_description"] = get_image_description(message["content"], message["image_description"])
-
-            responds = generate_respond()
-            append_history("🦄🦄🦄🦄🦄都报", responds, None, time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
-
-            responds = responds.splitlines()
-            for respond in responds:
-                client.group.send_message(group_id, respond)
-                time.sleep(1)
-
+        (scheduled_message_time >= time.time() and scheduled_message_time <= time.time() - time_interval_since_last_message and last_bot_message_time <= time.time() - max_time_interval_since_last_message)):    # 没到time_interval_since_last_message秒冷却的发言时间，且确实有人发言而不是1e10太远，但机器人已经max_time_interval_since_last_message秒没插过嘴了
             scheduled_message_time = 1e10
             last_bot_message_time = time.time()
+
+            if respond_or_not():
+                for i, message in enumerate(message_history):
+                    if message["username"] != "🦄🦄🦄🦄🦄禁言" and message["image_description"] and isinstance(message["image_description"], list) and i != len(message_history) - 1:
+                        message_history[i]["image_description"] = get_image_description(message["content"], message["image_description"])
+
+                responds = generate_respond()
+                append_history("🦄🦄🦄🦄🦄都报", responds, None, time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
+
+                responds = responds.splitlines()
+                for respond in responds:
+                    client.group.send_message(group_id, respond)
+                    time.sleep(1)
+
+                scheduled_message_time = 1e10
+                last_bot_message_time = time.time()
 
             print(message_history)
 
@@ -335,7 +422,7 @@ class Callbacks(QQCallbacks):
                         print(message_history)
 
                         global scheduled_message_time
-                        scheduled_message_time = time.time() + (20 if "都报" not in message["content"] and "<@Rantindom机器人>" not in message["content"] else 0)
+                        scheduled_message_time = time.time() + (20 if "都报" not in message["content"] and "<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>" not in message["content"] else 0)
 
                     else:
                         append_history(
