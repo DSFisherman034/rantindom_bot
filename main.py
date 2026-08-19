@@ -22,8 +22,9 @@ aiclient = openai.OpenAI(
     api_key=config.get("ai", "api_key"),
     base_url=config.get("ai", "base_url"),
 )
-chat_model = config.get("bot", "chat_model")
-multimodal_model = config.get("bot", "multimodal_model")
+print(f"api: {config.get("ai", "api_key")}")
+chat_model = config.get("ai", "chat_model")
+multimodal_model = config.get("ai", "multimodal_model")
 
 time_interval_since_last_message = 20   #人类用户发言这么多秒后决策一次机器人是否发言
 max_time_interval_since_last_message = 120  # 如果一直有人发言，这么多秒后机器人插不上嘴，则强制决策一次是否插嘴
@@ -321,8 +322,6 @@ def repeated_main():
     global last_bot_message_time
 
     while True:
-        print(f"scheduled_message_time: {scheduled_message_time}, max_time_interval_since_last_message: {max_time_interval_since_last_message}, 前一条件: {scheduled_message_time <= time.time()}, 后一条件: {scheduled_message_time >= time.time() and scheduled_message_time <= time.time() - time_interval_since_last_message and last_bot_message_time <= time.time() - max_time_interval_since_last_message}")
-
         if (scheduled_message_time <= time.time()  # 到time_interval_since_last_message秒冷却的发言时间了
         or 
         (scheduled_message_time >= time.time() and scheduled_message_time <= time.time() - time_interval_since_last_message and last_bot_message_time <= time.time() - max_time_interval_since_last_message)):    # 没到time_interval_since_last_message秒冷却的发言时间，且确实有人发言而不是1e10太远，但机器人已经max_time_interval_since_last_message秒没插过嘴了
