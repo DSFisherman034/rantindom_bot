@@ -324,7 +324,7 @@ def repeated_main():
     while True:
         if (scheduled_message_time <= time.time()  # 到time_interval_since_last_message秒冷却的发言时间了
         or 
-        (scheduled_message_time >= time.time() and scheduled_message_time <= time.time() - time_interval_since_last_message and last_bot_message_time <= time.time() - max_time_interval_since_last_message)):    # 没到time_interval_since_last_message秒冷却的发言时间，且确实有人发言而不是1e10太远，但机器人已经max_time_interval_since_last_message秒没插过嘴了
+        (scheduled_message_time >= time.time() and scheduled_message_time <= time.time() + time_interval_since_last_message and last_bot_message_time <= time.time() - max_time_interval_since_last_message)):    # 没到time_interval_since_last_message秒冷却的发言时间，且确实有人发言而不是1e10太远，但机器人已经max_time_interval_since_last_message秒没插过嘴了
             scheduled_message_time = 1e10
             last_bot_message_time = time.time()
 
