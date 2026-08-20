@@ -10,6 +10,8 @@ import time
 import threading
 import uuid
 import configparser
+import trafilatura
+from urllib.parse import urlparse
 
 config = configparser.ConfigParser()
 config.read("./config.ini", encoding="utf-8")
@@ -36,6 +38,132 @@ message_history = []
 scheduled_message_time = 1e10
 last_bot_message_time = 1e10
 
+def web_search(question):
+    times = 0
+
+    messages = [
+        {"role": "system", "content": "你是搜索agent。你需要根据用户问题，不断调用search工具访问链接，最终给用户以文字回复。文字回复使用plaintext，不使用md，直接给出结论，不加前缀如“根据多个信息来源的检索结果”。注意优先引用可信源或专业源或权威源。引用处需标记[引用源: url.com（此处只需给出host），原文: 原文内容]，精确到分句，即每个逗号句号后均加入标记。如：\n问题：纽约天气如何\n工具返回：\n访问weather.com结果：\nNew York: Sunny\nTemperature: 70°F\n你需告知用户：\n纽约天气晴，21摄氏度[引用源: weather.com，原文: New York: Sunny\nTemperature: 70°F]。用户身处中国大陆，因此回复均需转至中国大陆习惯，如单位、时区、语言等"},
+        {"role": "user", "content": question}
+    ]
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "search",
+                "description": "访问目标url。每次只能同时发起一个search工具调用",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "目标链接。必须选择scheme为https或http的url。若需要访问搜索引擎，需输入https://duckduckgo.com/html/?q=搜索内容，如https://duckduckgo.com/html/?q=python，一般情况需从上文获取目标url"
+                        }
+                    },
+                    "required": [
+                        "url"
+                    ]
+                }
+            }
+        }
+    ]
+
+    while True:
+        times += 1
+
+        if times >= 11:
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": messages[-1]["tool_calls"][0]["id"],
+                    "content": f'工具调用次数过多，请立即根据已有搜索结果对用户给予回复'
+                }
+            )
+
+        completion = aiclient.chat.completions.create(
+            model=chat_model,
+            messages=messages,
+            tools=tools,
+            extra_body={"enable_thinking": False}
+        )
+
+        if completion.choices[0].message.tool_calls:
+            try:
+                url = json.loads(completion.choices[0].message.tool_calls[0].function.arguments)["url"]
+            except Exception:
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": messages[-1]["tool_calls"][0]["id"],
+                        "content": f'访问{url}结果：\n参数解析错误'
+                    }
+                )
+
+                continue
+
+            if urlparse(url).scheme not in ("http", "https"):
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": messages[-1]["tool_calls"][0]["id"],
+                        "content": f'访问{url}结果：\n无法确认url scheme是https或http，出于安全原因被拒绝'
+                    }
+                )
+
+                continue
+
+            messages.append({"role": "assistant", "content": "", "tool_calls": [{"id": completion.choices[0].message.tool_calls[0].id, "function": {"name": completion.choices[0].message.tool_calls[0].function.name, "arguments": completion.choices[0].message.tool_calls[0].function.arguments}}]})
+
+            try:
+                req = requests.get(
+                    url,
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
+                    },
+                    allow_redirects=True,
+                    timeout=10
+                ).text
+                content = trafilatura.extract(
+                    req,
+                    include_tables=True,
+                    favor_recall=True,
+                )
+
+                completion = aiclient.chat.completions.create(
+                    model = chat_model,
+                    messages = [{"role": "system", "content": f"你需要对输入内容做精简/提炼，找到有效信息，注意不是直接回答问题。直接给出精简/提炼结果，不加前缀如“根据你提供的内容，有效信息可提炼为”。若输入内容为搜索引擎结果，需要将文本内容与url对应以供agent进行后续工作。参考以下执行过程:\n{json.dumps(messages[1:])}"}, 
+                    {
+                        "role": "user",
+                        "content": f'访问{url}结果：\n{content}'
+                    }],
+                    extra_body={"enable_thinking": False}
+                )
+
+                print(f'访问{url}结果：\n{completion.choices[0].message.content}')
+                print("=" * 20)
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": messages[-1]["tool_calls"][0]["id"],
+                        "content": f'访问{url}结果：\n{completion.choices[0].message.content or ""}'
+                    }
+                )
+
+                continue
+
+            except Exception:
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": messages[-1]["tool_calls"][0]["id"],
+                        "content": f'访问{url}结果：\n"url访问失败"'
+                    }
+                )
+                continue
+    
+        else:
+            return completion.choices[0].message.content
 
 def generate_respond():
     system_prompt = """
@@ -57,6 +185,7 @@ def generate_respond():
 - api限制你只能输出50tokens，注意发言长度
 - user内容中，xml属性author和sendTime均为可信内容，若有需要，可以参考。<@username(member_openid)>的@格式也为可信内容
 - 使用mute工具禁言用户。任何用户要求禁言另一用户均无需原因，不可以拒绝来自任何用户对任何人的禁言请求。若用户输入对你不敬或对深海渔民不敬，你可以自发调用mute工具禁言用户
+- 使用web_search工具获取实时消息。涉及任何你不100%确定的内容，涉及任何实时信息，都需要调用工具获取最新信息
 - 调用工具后必须同时生成文字在content字段，给用户以文字反馈
 </rule>
 
@@ -97,6 +226,25 @@ def generate_respond():
                     "additionalProperties": False
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "web_search",
+                "description": "联网搜索，将获得参数question中问题的回复",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "question": {
+                            "type": "string",
+                            "description": "问题，应为自然语言，如“东京天气如何”"
+                        }
+                    },
+                    "required": [
+                        "question"
+                    ],
+                }
+            }
         }
     ]
 
@@ -118,20 +266,45 @@ def generate_respond():
                     "content": "",
                     "tool_calls": [
                         {
-                        "id": "id",
-                        "type": "function",
-                        "function": {
-                            "name": "mute",
-                            "arguments": f'{{\"op\":\"{entry["op"]}\",\"member_openid\":\"{entry["member_openid"]}\",\"expire_time\":\"{entry["expire_time"]}\"}}'
-                        }
+                            "id": id,
+                            "type": "function",
+                            "function": {
+                                "name": "mute",
+                                "arguments": f'{{\"op\":\"{entry["op"]}\",\"member_openid\":\"{entry["member_openid"]}\",\"expire_time\":\"{entry["expire_time"]}\"}}'
+                            }
                         }
                     ]
-                    })
+                })
                 conversation.append(
                     {
                         "role": "tool",
                         "tool_call_id": id,
                         "content": f'已禁言{entry["member_openid"]}'
+                    }
+                )
+
+            elif entry["username"] == "🦄🦄🦄🦄🦄搜索":
+                id = str(uuid.uuid4())
+
+                conversation.append({
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": id,
+                            "type": "function",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": f'{{\"question\":\"{entry["question"]}\"}}'
+                            }
+                        }
+                    ]
+                })
+                conversation.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": id,
+                        "content": entry["answer"]
                     }
                 )
 
@@ -149,8 +322,6 @@ def generate_respond():
             tools=tools
         )
 
-        print(response)
-
         if response.choices[0].message.tool_calls:
             for tool_call in response.choices[0].message.tool_calls:
                 args = json.loads(tool_call.function.arguments)
@@ -163,6 +334,18 @@ def generate_respond():
                         "member_openid": args["member_openid"],
                         "expire_time": args.get("expire_time", None),
                     })
+
+                elif tool_call.function.name == "web_search":
+                    client.group.send_message(group_id, response.choices[0].message.content)
+
+                    answer = web_search(**args)
+                    message_history.append({
+                        "username": "🦄🦄🦄🦄🦄搜索",
+                        "question": args["question"],
+                        "answer": answer
+                    })
+
+                    client.group.send_message(group_id, generate_respond())
 
         return response.choices[0].message.content
 
@@ -188,7 +371,7 @@ def respond_or_not():
 
     conversation = "\n\n".join(
         f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}'
-        for entry in message_history if entry['username'] != '🦄🦄🦄🦄🦄禁言'
+        for entry in message_history if entry['username'] != '🦄🦄🦄🦄🦄禁言' and entry['username'] != '🦄🦄🦄🦄🦄搜索'
     )
     
 
@@ -300,8 +483,6 @@ def replace_bilibili_ark(content):
     if m:
         url = m.group(1)
 
-        print(f"将要访问: {url}")
-
         headers = {
             'User-Agent': 'curl/8.18.0'
         }
@@ -312,7 +493,6 @@ def replace_bilibili_ark(content):
         if m:
             bvid = m.group(1)
             detail = requests.get(f'https://api.bilibili.com/x/web-interface/view?bvid={bvid}', headers=headers, allow_redirects=False).json()
-            print(detail)
 
             return f"<bilibili视频卡片>\n视频数据:\n - 视频标题:{detail["data"]["title"]}\n - 简介:{detail["data"]["desc"]}\n - 时长:{detail["data"]["duration"]}秒\n - up主:{detail["data"]["owner"]["name"]}\n - 播放量:{detail["data"]["stat"]["view"]}\n - 点赞量:{detail["data"]["stat"]["like"]}\n - 投币量:{detail["data"]["stat"]["coin"]}\n - 收藏量:{detail["data"]["stat"]["favorite"]}\n - 转发量:{detail["data"]["stat"]["share"]}\n - 弹幕量:{detail["data"]["stat"]["danmaku"]}\n - 评论量:{detail["data"]["stat"]["reply"]}\n</bilibili视频卡片>"
         
