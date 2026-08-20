@@ -14,17 +14,19 @@ import configparser
 config = configparser.ConfigParser()
 config.read("./config.ini", encoding="utf-8")
 
-appid = config.get("bot", "appid")
-appsecret = config.get("bot", "appsecret")
-group_id = config.get("bot", "group_id")
+appid = config.get("bot", "appid").strip()
+appsecret = config.get("bot", "appsecret").strip()
+group_id = config.get("bot", "group_id").strip()
+
+api_key = config.get("ai", "api_key").strip()
+base_url = config.get("ai", "base_url").strip()
 
 aiclient = openai.OpenAI(
-    api_key=config.get("ai", "api_key"),
-    base_url=config.get("ai", "base_url"),
+    api_key=api_key,
+    base_url=base_url,
 )
-print(f"api: {config.get("ai", "api_key")}")
-chat_model = config.get("ai", "chat_model")
-multimodal_model = config.get("ai", "multimodal_model")
+chat_model = config.get("ai", "chat_model").strip()
+multimodal_model = config.get("ai", "multimodal_model").strip()
 
 time_interval_since_last_message = 20   #人类用户发言这么多秒后决策一次机器人是否发言
 max_time_interval_since_last_message = 120  # 如果一直有人发言，这么多秒后机器人插不上嘴，则强制决策一次是否插嘴
@@ -354,7 +356,10 @@ class Callbacks(QQCallbacks):
         self.last_message_id = None
 
     def when_get_dc_message(self, message):
-        if message["author"]["user_openid"] == "27DA648A3E34BFA565FBC1813151AA07":
+        if message["content"] == "🦄🦄🦄🦄🦄解除禁言":
+            client.group.mute(group_id, message["author"]["user_openid"], "del")
+            return "已解除"
+        elif message["author"]["user_openid"] == "27DA648A3E34BFA565FBC1813151AA07":
             client.group.send_message(
                 message["author"]["user_openid"],
                 message["content"],
