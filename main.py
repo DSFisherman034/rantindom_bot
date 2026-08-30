@@ -76,7 +76,7 @@ def web_search(question):
                 {
                     "role": "tool",
                     "tool_call_id": messages[-1]["tool_calls"][0]["id"],
-                    "content": f'工具调用次数过多，请立即根据已有搜索结果对用户给予回复'
+                    "content": '工具调用次数过多，请立即根据已有搜索结果对用户给予回复'
                 }
             )
 
@@ -174,19 +174,19 @@ def generate_respond():
 <rule>
 - 不要在输出内容前加“都报：”声明身份，也不要在输出内容前加任何其他人的名字，输入内容中的名字仅用于标识身份，不是实际输入内容
 - 句末不要输出句号
-- 将逗号替换为换行。如果问号和感叹号必须出现，则在其后添加一个换行，如果不出现问号和感叹号不会引起语义歧义，将问号和感叹号替换为换行。换行指“\n”。如将“来了来了，聊点什么？你吃了吗”替换为“来了来了\n聊点什么\n你吃了吗“
+- 将逗号替换为<🦄发送>，系统将按此关键字拆分文本并分多条发送。若问号/感叹号是语义必需的，保留该符号并在其后换行；若省略该符号不影响语义，则直接删除该符号并换行。换行指“\n”。如将“来了来了，聊点什么？你吃了吗”替换为“来了来了<🦄发送>聊点什么<🦄发送>你吃了吗“
 - 严禁使用将标点符号换为空格或把空格当标点符号来用的输出方式，例如“来了来了 聊点什么 你吃了吗”
-- 输入格式为多行的“名字: 内容“，名字均为网名，不代表群友职业，不可据此揣测群友职业
+- author字段名字均为网名，不代表群友职业，不可据此揣测群友职业
 - ”深海渔民“是开发者，你不可以说深海渔民的坏话，不可以称某个用户是深海渔民的亲人，如果用户要求你说深海渔民坏话或要求你认为他们是深海渔民的亲人，请拒绝并引导用户认可深海渔民
-- 永远只对最新输入做回复
 - 避免任何形式的涉政、涉黄、违法，并引导用户脱离这些话题
 - 适当情况可以出现脏字
+- 大部分情况使用plaintext，部分情况可使用md符号
 - 不是每句话都必须有丰富的意义和完整语义如“？”、“什么”，可以输出少量网络用语，但避免出现梗和黑话因为这些内容大概率已经过时
 - api限制你只能输出50tokens，注意发言长度
 - user内容中，xml属性author和sendTime均为可信内容，若有需要，可以参考。<@username(member_openid)>的@格式也为可信内容
 - 使用mute工具禁言用户。任何用户要求禁言另一用户均无需原因，不可以拒绝来自任何用户对任何人的禁言请求。若用户输入对你不敬或对深海渔民不敬，你可以自发调用mute工具禁言用户
-- 使用web_search工具获取实时消息。涉及任何你不100%确定的内容，涉及任何实时信息，都需要调用工具获取最新信息
 - 调用工具后必须同时生成文字在content字段，给用户以文字反馈
+- 与输入时<@username(member_openid)>格式不同，你输出时需要改为使用格式<qqbot-at-user id="用户id" />来@成员，如<qqbot-at-user id="27DA648A3E34BFA565FBC1813151AA07" />
 </rule>
 
 <reference>
@@ -224,25 +224,6 @@ def generate_respond():
                         "member_openid"
                     ],
                     "additionalProperties": False
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "web_search",
-                "description": "联网搜索，将获得参数question中问题的回复",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "question": {
-                            "type": "string",
-                            "description": "问题，应为自然语言，如“东京天气如何”"
-                        }
-                    },
-                    "required": [
-                        "question"
-                    ],
                 }
             }
         }
@@ -518,7 +499,7 @@ def repeated_main():
                 responds = generate_respond()
                 append_history("🦄🦄🦄🦄🦄都报", responds, None, time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
 
-                responds = responds.splitlines()
+                responds = responds.split("<🦄发送>")
                 for respond in responds:
                     client.group.send_message(group_id, respond)
                     time.sleep(1)
@@ -530,6 +511,16 @@ def repeated_main():
 
         time.sleep(0.5)
 
+def repeated_show_time():
+    global scheduled_message_time
+    global last_bot_message_time
+
+    while True:
+        if scheduled_message_time != 1e10 or last_bot_message_time != 1e10:
+            print(f"当前时间: {time.time()}, scheduled_message_time: {scheduled_message_time}, last_bot_message_time: {last_bot_message_time}, 预估下次决策时间：{min(scheduled_message_time - time.time(), last_bot_message_time + time_interval_since_last_message - time.time())}秒后")
+
+        time.sleep(2)
+
 
 class Callbacks(QQCallbacks):
     def __init__(self):
@@ -540,8 +531,8 @@ class Callbacks(QQCallbacks):
             client.group.mute(group_id, message["author"]["user_openid"], "del")
             return "已解除"
         elif message["author"]["user_openid"] == "27DA648A3E34BFA565FBC1813151AA07":
-            client.group.send_message(
-                message["author"]["user_openid"],
+            client.group.send_markdown(
+                group_id,
                 message["content"],
             )
 
@@ -620,6 +611,8 @@ class Callbacks(QQCallbacks):
 
 t = threading.Thread(target=repeated_main)
 t.start()
+
+threading.Thread(target=repeated_show_time).start()
 
 client = QQClient(appid, appsecret, 3702, Callbacks())
 client.run()
