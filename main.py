@@ -509,6 +509,9 @@ def repeated_main():
 
             print(message_history)
 
+        if scheduled_message_time == 1e10 and last_bot_message_time <= time.time() - max_time_interval_since_last_message:
+            last_bot_message_time = 1e10
+
         time.sleep(0.5)
 
 def repeated_show_time():
@@ -602,10 +605,8 @@ class Callbacks(QQCallbacks):
                         print(message_history)
 
                         global scheduled_message_time
-                        global last_bot_message_time
 
                         scheduled_message_time = time.time() + (20 if "都报" not in message["content"] and "<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>" not in message["content"] else 0)
-                        last_bot_message_time = time.time()
 
                     else:
                         append_history(
