@@ -489,7 +489,7 @@ def repeated_main():
         or 
         (scheduled_message_time >= time.time() and scheduled_message_time <= time.time() + time_interval_since_last_message and last_bot_message_time <= time.time() - max_time_interval_since_last_message)):    # 没到time_interval_since_last_message秒冷却的发言时间，且确实有人发言而不是1e10太远，但机器人已经max_time_interval_since_last_message秒没插过嘴了
             scheduled_message_time = 1e10
-            last_bot_message_time = time.time()
+            last_bot_message_time = 1e10
 
             if respond_or_not():
                 for i, message in enumerate(message_history):
@@ -517,7 +517,7 @@ def repeated_show_time():
 
     while True:
         if scheduled_message_time != 1e10 or last_bot_message_time != 1e10:
-            print(f"当前时间: {time.time()}, scheduled_message_time: {scheduled_message_time}, last_bot_message_time: {last_bot_message_time}, 预估下次决策时间：{min(scheduled_message_time - time.time(), last_bot_message_time + time_interval_since_last_message - time.time())}秒后")
+            print(f"当前时间: {time.time()}, scheduled_message_time: {scheduled_message_time}, last_bot_message_time: {last_bot_message_time}, 预估下次决策时间：{min(scheduled_message_time - time.time(), last_bot_message_time + max_time_interval_since_last_message - time.time())}秒后")
 
         time.sleep(2)
 
@@ -602,7 +602,10 @@ class Callbacks(QQCallbacks):
                         print(message_history)
 
                         global scheduled_message_time
+                        global last_bot_message_time
+
                         scheduled_message_time = time.time() + (20 if "都报" not in message["content"] and "<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>" not in message["content"] else 0)
+                        last_bot_message_time = time.time()
 
                     else:
                         append_history(
