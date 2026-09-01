@@ -14,6 +14,7 @@ import trafilatura
 import hashlib
 from PIL import Image
 from pathlib import Path
+from io import BytesIO
 from urllib.parse import urlparse
 
 config = configparser.ConfigParser()
@@ -387,38 +388,45 @@ def get_image_description(text, hashes):
     system_prompt = "你需要根据文字输入，描述图片内容。“根据文字输入”意思是，如果文字输入中有特别指定的内容，则需重点描述图片对应部分，如果没有文字输入或无聚焦点，正常描述。文字输入来自社交媒体。如输入“看这个落日”则描述图片中的落日；如果图片中没有落日，即用户指着不是落日的图片说看这落日，需如实描述图片内容而非编造文字指定内容。如输入“啊这”，无任何聚焦，则正常描述图片内容即可，无须特别聚焦于某一区域。若输入多张图片，则每张图片都需要分别描述。不使用md符号，使用单行plaintext"
     user_prompt = f"根据文字输入:\n{text}\n描述图片内容"
 
-    urls = []
-    for image_hash in hashes:
-        img = Image.open(f"./images/{image_hash}")
-        mime = {
-            "JPEG": "image/jpeg",
-            "PNG": "image/png",
-            "WEBP": "image/webp",
-            "GIF": "image/gif",
-        }.get(img.format, "image/png")
+    big_image_count = hashes.count("toobig")
+    hashes = [i for i in hashes if i != "toobig"]
 
-        with open(f"./images/{image_hash}", "rb") as file:
-            image_data = file.read()
-            image_base64 = base64.b64encode(image_data).decode()
+    if len(hashes) > 0:
+        urls = []
+        for image_hash in hashes:
+            img = Image.open(f"./images/{image_hash}")
+            mime = {
+                "JPEG": "image/jpeg",
+                "PNG": "image/png",
+                "WEBP": "image/webp",
+                "GIF": "image/gif",
+            }.get(img.format, "image/png")
 
-        urls.append(f"data:{mime};base64,{image_base64}")
+            with open(f"./images/{image_hash}", "rb") as file:
+                image_data = file.read()
+                image_base64 = base64.b64encode(image_data).decode()
 
-        Path(f"./images/{image_hash}").unlink()
+            urls.append(f"data:{mime};base64,{image_base64}")
 
-    respond = aiclient.chat.completions.create(
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": user_prompt}]
-                + [{"type": "image_url", "image_url": {"url": url}} for url in urls],
-            },
-        ],
-        model=multimodal_model,
-        extra_body={"enable_thinking": False}
-    )
+            Path(f"./images/{image_hash}").unlink()
 
-    return respond.choices[0].message.content
+        respond = aiclient.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": user_prompt}]
+                    + [{"type": "image_url", "image_url": {"url": url}} for url in urls],
+                },
+            ],
+            model=multimodal_model,
+            extra_body={"enable_thinking": False}
+        )
+
+        return f"{respond.choices[0].message.content}{f"\n\n另有{big_image_count}张图片，因它{"们" if big_image_count >= 1 else ""}大于5Mb，故拒绝读取" if big_image_count > 0 else ""}"
+
+    else:
+        return f"用户上传了{big_image_count}张图片，因它{"们" if big_image_count >= 1 else ""}大于5Mb，故拒绝读取"
 
 
 def append_history(username, content, image_description, time):
@@ -427,7 +435,7 @@ def append_history(username, content, image_description, time):
     if len(message_history) >= 1 and message_history[-1]["username"] == username:
         message_history[-1]["content"] += (f"\n{content}" if content else "")
         message_history[-1]["image_description"] += image_description
-        staging_images += image_description
+        staging_images += [i for i in image_description if i != "toobig"]
 
     else:
         message_history.append(
@@ -581,10 +589,23 @@ class Callbacks(QQCallbacks):
             image_hashes = []
             for entry in message["attachments"]:
                 image_data = requests.get(entry["url"]).content
-                image_hash = hashlib.sha256(image_data).hexdigest()
 
-                with open(f"./images/{image_hash}", "wb") as file:
-                    file.write(image_data)
+                if len(image_data) > 5 * 1024 * 1024:
+                    image_hash = "toobig"
+
+                else:
+                    img = Image.open(BytesIO(image_data))
+
+                    ratio = img.width / img.height
+                    img = img.resize((512, 512 / ratio) if ratio >= 1 else (512 * ratio, 512), Image.Resampling.LANCZOS)
+                    buffer = BytesIO()
+                    img.save(buffer, format="PNG")
+                    image_data = buffer.getvalue()
+
+                    image_hash = hashlib.sha256(image_data).hexdigest()
+
+                    with open(f"./images/{image_hash}", "wb") as file:
+                        file.write(image_data)
 
                 image_hashes.append(image_hash)
 
