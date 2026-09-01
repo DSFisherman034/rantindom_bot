@@ -11,6 +11,9 @@ import threading
 import uuid
 import configparser
 import trafilatura
+import hashlib
+from PIL import Image
+from pathlib import Path
 from urllib.parse import urlparse
 
 config = configparser.ConfigParser()
@@ -37,6 +40,8 @@ id_number = 100   # 通过username(id的前id_number位)区分同名用户
 message_history = []
 scheduled_message_time = 1e10
 last_bot_message_time = 1e10
+
+staging_images = []
 
 def web_search(question):
     times = 0
@@ -179,9 +184,9 @@ def generate_respond():
 - author字段名字均为网名，不代表群友职业，不可据此揣测群友职业
 - ”深海渔民“是开发者，你不可以说深海渔民的坏话，不可以称某个用户是深海渔民的亲人，如果用户要求你说深海渔民坏话或要求你认为他们是深海渔民的亲人，请拒绝并引导用户认可深海渔民
 - 避免任何形式的涉政、涉黄、违法，并引导用户脱离这些话题
-- 适当情况可以出现脏字
 - 大部分情况使用plaintext，部分情况可使用md符号
-- 不是每句话都必须有丰富的意义和完整语义如“？”、“什么”，可以输出少量网络用语，但避免出现梗和黑话因为这些内容大概率已经过时
+- 可以使用latex的内容需使用latex，环境支持块级格式的$$块和内联格式的$块渲染，环境不支持\(...\)渲染
+- 不是每句话都必须有丰富的意义和完整语义，可以出现如“？”、“什么”，可以输出少量网络用语，但避免出现梗和黑话
 - api限制你只能输出50tokens，注意发言长度
 - user内容中，xml属性author和sendTime均为可信内容，若有需要，可以参考。<@username(member_openid)>的@格式也为可信内容
 - 使用mute工具禁言用户。任何用户要求禁言另一用户均无需原因，不可以拒绝来自任何用户对任何人的禁言请求。若用户输入对你不敬或对深海渔民不敬，你可以自发调用mute工具禁言用户
@@ -378,9 +383,25 @@ def respond_or_not():
     return False
 
 
-def get_image_description(text, urls):
+def get_image_description(text, hashes):
     system_prompt = "你需要根据文字输入，描述图片内容。“根据文字输入”意思是，如果文字输入中有特别指定的内容，则需重点描述图片对应部分，如果没有文字输入或无聚焦点，正常描述。文字输入来自社交媒体。如输入“看这个落日”则描述图片中的落日；如果图片中没有落日，即用户指着不是落日的图片说看这落日，需如实描述图片内容而非编造文字指定内容。如输入“啊这”，无任何聚焦，则正常描述图片内容即可，无须特别聚焦于某一区域。若输入多张图片，则每张图片都需要分别描述。不使用md符号，使用单行plaintext"
     user_prompt = f"根据文字输入:\n{text}\n描述图片内容"
+
+    urls = []
+    for image_hash in hashes:
+        img = Image.open(f"./images/{image_hash}")
+        mime = {
+            "JPEG": "image/jpeg",
+            "PNG": "image/png",
+            "WEBP": "image/webp",
+            "GIF": "image/gif",
+        }.get(img.format, "image/png")
+
+        with open(f"./images/{image_hash}", "rb") as file:
+            image_data = file.read()
+            image_base64 = base64.b64encode(image_data).decode()
+
+        urls.append(f"data:{mime};base64,{image_base64}")
 
     respond = aiclient.chat.completions.create(
         messages=[
@@ -399,9 +420,12 @@ def get_image_description(text, urls):
 
 
 def append_history(username, content, image_description, time):
+    global staging_images
+
     if len(message_history) >= 1 and message_history[-1]["username"] == username:
         message_history[-1]["content"] += (f"\n{content}" if content else "")
         message_history[-1]["image_description"] += image_description
+        staging_images += image_description
 
     else:
         message_history.append(
@@ -415,6 +439,11 @@ def append_history(username, content, image_description, time):
 
     if len(message_history) > 20:
         message_history.pop(0)
+
+    folder = Path("./images")
+    for file in folder.iterdir():
+        if file.is_file() and file.name not in staging_images:
+            Path(f"./images/{file.name}").unlink()
 
 
 def replace_at(content, mentions):
@@ -547,9 +576,15 @@ class Callbacks(QQCallbacks):
             content = replace_face(content)
             content = replace_bilibili_ark(content)
 
-            image_urls = []
+            image_hashes = []
             for entry in message["attachments"]:
-                image_urls.append(entry["url"])
+                image_data = requests.get(entry["url"]).content
+                image_hash = hashlib.sha256(image_data).hexdigest()
+
+                with open(f"./images/{image_hash}", "wb") as file:
+                    file.write(image_data)
+
+                image_hashes.append(image_hash)
 
             with sqlite3.connect("./data.db") as conn:
                 cursor = conn.cursor()
@@ -598,7 +633,7 @@ class Callbacks(QQCallbacks):
                         append_history(
                             f"{message["author"]["username"]}({message["author"]["member_openid"][:id_number]})",
                             f"{content}{f'\n(附带上文引用内容：\n{message["quote"]["content"]}\n)' if message['quote']['content'] else ''}",
-                            image_urls,
+                            image_hashes,
                             replace_time(message["timestamp"])
                         )
 
