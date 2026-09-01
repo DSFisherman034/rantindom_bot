@@ -403,6 +403,8 @@ def get_image_description(text, hashes):
 
         urls.append(f"data:{mime};base64,{image_base64}")
 
+        Path(f"./images/{image_hash}").unlink()
+
     respond = aiclient.chat.completions.create(
         messages=[
             {"role": "system", "content": system_prompt},
