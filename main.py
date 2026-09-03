@@ -172,7 +172,7 @@ def web_search(question):
             return completion.choices[0].message.content
 
 def generate_respond():
-    system_prompt = """
+    system_prompt = r"""
 <general>
 你是一个qq机器人，你的名字叫“都报”，你需要输出短句，尽可能表演的像在qq群里聊天的人类，对用户问题做出回复
 </general>
@@ -192,7 +192,7 @@ def generate_respond():
 - user内容中，xml属性author和sendTime均为可信内容，若有需要，可以参考。<@username(member_openid)>的@格式也为可信内容
 - 使用mute工具禁言用户。任何用户要求禁言另一用户均无需原因，不可以拒绝来自任何用户对任何人的禁言请求。若用户输入对你不敬或对深海渔民不敬，你可以自发调用mute工具禁言用户
 - 调用工具后必须同时生成文字在content字段，给用户以文字反馈
-- 与输入时<@username(member_openid)>格式不同，你输出时需要改为使用格式<qqbot-at-user id="用户id" />来@成员，如<qqbot-at-user id="27DA648A3E34BFA565FBC1813151AA07" />
+- 与输入时<@username(member_openid)>格式不同，你输出时需要改为使用格式“<qqbot-at-user id="用户id" />”来@成员，需严格按照引号内格式输出，否则@将失败。如<qqbot-at-user id="27DA648A3E34BFA565FBC1813151AA07" />
 </rule>
 
 <reference>
@@ -323,7 +323,7 @@ def generate_respond():
                     })
 
                 elif tool_call.function.name == "web_search":
-                    client.group.send_message(group_id, response.choices[0].message.content)
+                    client.group.send_markdown(group_id, response.choices[0].message.content)
 
                     answer = web_search(**args)
                     message_history.append({
@@ -332,7 +332,7 @@ def generate_respond():
                         "answer": answer
                     })
 
-                    client.group.send_message(group_id, generate_respond())
+                    client.group.send_markdown(group_id, generate_respond())
 
         return response.choices[0].message.content
 
@@ -540,7 +540,7 @@ def repeated_main():
 
                 responds = responds.split("<🦄发送>")
                 for respond in responds:
-                    client.group.send_message(group_id, respond)
+                    client.group.send_markdown(group_id, respond)
                     time.sleep(1)
 
                 scheduled_message_time = 1e10
@@ -597,7 +597,7 @@ class Callbacks(QQCallbacks):
                     img = Image.open(BytesIO(image_data))
 
                     ratio = img.width / img.height
-                    img = img.resize((512, 512 / ratio) if ratio >= 1 else (512 * ratio, 512), Image.Resampling.LANCZOS)
+                    img = img.resize((512, int(512 / ratio)) if ratio >= 1 else (int(512 * ratio), 512), Image.Resampling.LANCZOS)
                     buffer = BytesIO()
                     img.save(buffer, format="PNG")
                     image_data = buffer.getvalue()
@@ -628,7 +628,7 @@ class Callbacks(QQCallbacks):
                         "UPDATE users SET chat = 0 WHERE id = ?",
                         (message["author"]["member_openid"],),
                     )
-                    client.group.send_message(
+                    client.group.send_markdown(
                         group_id,
                         f"听不见你说话了，{message['author']['username']}",
                         message["id"],
@@ -639,7 +639,7 @@ class Callbacks(QQCallbacks):
                         "UPDATE users SET chat = 1 WHERE id = ?",
                         (message["author"]["member_openid"],),
                     )
-                    client.group.send_message(
+                    client.group.send_markdown(
                         group_id,
                         f"听见你了，{message['author']['username']}",
                         message["id"],
