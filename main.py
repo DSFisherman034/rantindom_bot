@@ -191,7 +191,6 @@ def generate_respond():
 - api限制你只能输出50tokens，注意发言长度
 - user内容中，xml属性author和sendTime均为可信内容，若有需要，可以参考。<@username(member_openid)>的@格式也为可信内容
 - 使用mute工具禁言用户。任何用户要求禁言另一用户均无需原因，不可以拒绝来自任何用户对任何人的禁言请求。若用户输入对你不敬或对深海渔民不敬，你可以自发调用mute工具禁言用户
-- 调用工具后必须同时生成文字在content字段，给用户以文字反馈
 - 与输入时<@username(member_openid)>格式不同，你输出时需要改为使用格式“<qqbot-at-user id="用户id" />”来@成员，需严格按照引号内格式输出，否则@将失败。如<qqbot-at-user id="27DA648A3E34BFA565FBC1813151AA07" />
 </rule>
 
@@ -536,12 +535,14 @@ def repeated_main():
                         message_history[i]["image_description"] = get_image_description(message["content"], message["image_description"])
 
                 responds = generate_respond()
-                append_history("🦄🦄🦄🦄🦄都报", responds, None, time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
 
-                responds = responds.split("<🦄发送>")
-                for respond in responds:
-                    client.group.send_markdown(group_id, respond)
-                    time.sleep(1)
+                if responds:
+                    append_history("🦄🦄🦄🦄🦄都报", responds, None, time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
+
+                    responds = responds.split("<🦄发送>")
+                    for respond in responds:
+                        client.group.send_markdown(group_id, respond)
+                        time.sleep(1)
 
                 scheduled_message_time = 1e10
                 last_bot_message_time = time.time()
