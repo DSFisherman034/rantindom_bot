@@ -16,33 +16,8 @@ from PIL import Image
 from pathlib import Path
 from io import BytesIO
 from urllib.parse import urlparse
+import traceback
 
-config = configparser.ConfigParser()
-config.read("./config.ini", encoding="utf-8")
-
-appid = config.get("bot", "appid").strip()
-appsecret = config.get("bot", "appsecret").strip()
-group_id = config.get("bot", "group_id").strip()
-
-api_key = config.get("ai", "api_key").strip()
-base_url = config.get("ai", "base_url").strip()
-
-aiclient = openai.OpenAI(
-    api_key=api_key,
-    base_url=base_url,
-)
-chat_model = config.get("ai", "chat_model").strip()
-multimodal_model = config.get("ai", "multimodal_model").strip()
-
-time_interval_since_last_message = 20   #人类用户发言这么多秒后决策一次机器人是否发言
-max_time_interval_since_last_message = 120  # 如果一直有人发言，这么多秒后机器人插不上嘴，则强制决策一次是否插嘴
-id_number = 100   # 通过username(id的前id_number位)区分同名用户
-
-message_history = []
-scheduled_message_time = 1e10
-last_bot_message_time = 1e10
-
-staging_images = []
 
 def web_search(question):
     times = 0
@@ -523,46 +498,54 @@ def repeated_main():
     global last_bot_message_time
 
     while True:
-        if (scheduled_message_time <= time.time()  # 到time_interval_since_last_message秒冷却的发言时间了
-        or 
-        (scheduled_message_time >= time.time() and scheduled_message_time <= time.time() + time_interval_since_last_message and last_bot_message_time <= time.time() - max_time_interval_since_last_message)):    # 没到time_interval_since_last_message秒冷却的发言时间，且确实有人发言而不是1e10太远，但机器人已经max_time_interval_since_last_message秒没插过嘴了
-            scheduled_message_time = 1e10
-            last_bot_message_time = 1e10
-
-            if respond_or_not():
-                for i, message in enumerate(message_history):
-                    if message["username"] != "🦄🦄🦄🦄🦄禁言" and message["image_description"] and isinstance(message["image_description"], list) and i != len(message_history) - 1:
-                        message_history[i]["image_description"] = get_image_description(message["content"], message["image_description"])
-
-                responds = generate_respond()
-
-                if responds:
-                    append_history("🦄🦄🦄🦄🦄都报", responds, None, time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
-
-                    responds = responds.split("<🦄发送>")
-                    for respond in responds:
-                        client.group.send_markdown(group_id, respond)
-                        time.sleep(1)
-
+        try:
+            if (scheduled_message_time <= time.time()  # 到time_interval_since_last_message秒冷却的发言时间了
+            or 
+            (scheduled_message_time >= time.time() and scheduled_message_time <= time.time() + time_interval_since_last_message and last_bot_message_time <= time.time() - max_time_interval_since_last_message)):    # 没到time_interval_since_last_message秒冷却的发言时间，且确实有人发言而不是1e10太远，但机器人已经max_time_interval_since_last_message秒没插过嘴了
                 scheduled_message_time = 1e10
-                last_bot_message_time = time.time()
+                last_bot_message_time = 1e10
 
-            print(message_history)
+                if respond_or_not():
+                    for i, message in enumerate(message_history):
+                        if message["username"] != "🦄🦄🦄🦄🦄禁言" and message["image_description"] and isinstance(message["image_description"], list) and i != len(message_history) - 1:
+                            message_history[i]["image_description"] = get_image_description(message["content"], message["image_description"])
 
-        if scheduled_message_time == 1e10 and last_bot_message_time <= time.time() - max_time_interval_since_last_message:
-            last_bot_message_time = 1e10
+                    responds = generate_respond()
 
-        time.sleep(0.5)
+                    if responds:
+                        append_history("🦄🦄🦄🦄🦄都报", responds, None, time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
+
+                        responds = responds.split("<🦄发送>")
+                        for respond in responds:
+                            client.group.send_markdown(group_id, respond)
+                            time.sleep(1)
+
+                    scheduled_message_time = 1e10
+                    last_bot_message_time = time.time()
+
+                print(message_history)
+
+            if scheduled_message_time == 1e10 and last_bot_message_time <= time.time() - max_time_interval_since_last_message:
+                last_bot_message_time = 1e10
+
+            time.sleep(0.5)
+        except Exception:
+            client.group.send_message(group_id, traceback.format_exc().splitlines()[-1])
+            continue
 
 def repeated_show_time():
     global scheduled_message_time
     global last_bot_message_time
 
     while True:
-        if scheduled_message_time != 1e10 or last_bot_message_time != 1e10:
-            print(f"当前时间: {time.time()}, scheduled_message_time: {scheduled_message_time}, last_bot_message_time: {last_bot_message_time}, 预估下次决策时间：{min(scheduled_message_time - time.time(), last_bot_message_time + max_time_interval_since_last_message - time.time())}秒后")
+        try:
+            if scheduled_message_time != 1e10 or last_bot_message_time != 1e10:
+                print(f"当前时间: {time.time()}, scheduled_message_time: {scheduled_message_time}, last_bot_message_time: {last_bot_message_time}, 预估下次决策时间：{min(scheduled_message_time - time.time(), last_bot_message_time + max_time_interval_since_last_message - time.time())}秒后")
 
-        time.sleep(2)
+            time.sleep(2)
+        except Exception:
+            client.group.send_message(group_id, traceback.format_exc().splitlines()[-1])
+            continue
 
 
 class Callbacks(QQCallbacks):
@@ -672,10 +655,43 @@ class Callbacks(QQCallbacks):
                             "unknown", "（此条信息发送者决定不让你看他的消息）", [], replace_time(message["timestamp"])
                         )
 
-t = threading.Thread(target=repeated_main)
-t.start()
+if __name__ == "__main__":
+    config = configparser.ConfigParser()
+    config.read("./config.ini", encoding="utf-8")
 
-threading.Thread(target=repeated_show_time).start()
+    appid = config.get("bot", "appid").strip()
+    appsecret = config.get("bot", "appsecret").strip()
+    group_id = config.get("bot", "group_id").strip()
 
-client = QQClient(appid, appsecret, 3702, Callbacks())
-client.run()
+    api_key = config.get("ai", "api_key").strip()
+    base_url = config.get("ai", "base_url").strip()
+
+    aiclient = openai.OpenAI(
+        api_key=api_key,
+        base_url=base_url,
+    )
+    chat_model = config.get("ai", "chat_model").strip()
+    multimodal_model = config.get("ai", "multimodal_model").strip()
+
+    time_interval_since_last_message = 20   #人类用户发言这么多秒后决策一次机器人是否发言
+    max_time_interval_since_last_message = 120  # 如果一直有人发言，这么多秒后机器人插不上嘴，则强制决策一次是否插嘴
+    id_number = 100   # 通过username(id的前id_number位)区分同名用户
+
+    message_history = []
+    scheduled_message_time = 1e10
+    last_bot_message_time = 1e10
+
+    staging_images = []
+
+    t = threading.Thread(target=repeated_main)
+    t.start()
+
+    threading.Thread(target=repeated_show_time).start()
+
+    while True:
+        try:
+            client = QQClient(appid, appsecret, 3702, Callbacks())
+            client.run()
+        except Exception:
+            client.group.send_message(group_id, traceback.format_exc().splitlines()[-1])
+            continue
