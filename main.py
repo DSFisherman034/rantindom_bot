@@ -415,12 +415,13 @@ def get_image_description(text, hashes):
 
 
 def append_history(username, content, image_description, time):
+    print(f"got image_description: {image_description}")
     global staging_images
+    staging_images += [i for i in image_description if i != "toobig"]
 
-    if len(message_history) >= 1 and message_history[-1]["username"] == username:
+    if len(message_history) >= 1 and message_history[-1]["username"] == username and isinstance(message_history[-1]["image_desription"], list):
         message_history[-1]["content"] += (f"\n{content}" if content else "")
         message_history[-1]["image_description"] += image_description
-        staging_images += [i for i in image_description if i != "toobig"]
 
     else:
         message_history.append(
@@ -516,15 +517,18 @@ def repeated_main():
                 scheduled_message_time = 1e10
                 last_bot_message_time = 1e10
 
-                for i, message in enumerate(message_history):
-                    if message["username"] != "🦄🦄🦄🦄🦄禁言" and message["image_description"] and isinstance(message["image_description"], list) and i != len(message_history) - 1:
+                for i, message in enumerate(message_history[:-1]):
+                    if message["username"] != "🦄🦄🦄🦄🦄禁言" and message["image_description"] and isinstance(message["image_description"], list):
                         message_history[i]["image_description"] = get_image_description(message["content"], message["image_description"])
 
                 if respond_or_not():
+                    if len(message_history) >= 1 and message_history[-1]["username"] != "🦄🦄🦄🦄🦄禁言" and message_history[-1]["image_description"] and isinstance(message_history[-1]["image_description"], list):
+                        message_history[-1]["image_description"] = get_image_description(message_history[-1]["content"], message_history[-1]["image_description"])
+
                     responds = generate_respond()
 
                     if responds:
-                        append_history("🦄🦄🦄🦄🦄都报", responds, None, time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
+                        append_history("🦄🦄🦄🦄🦄都报", responds, [], time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
 
                         responds = responds.split("<🦄发送>")
                         for respond in responds:
@@ -558,7 +562,7 @@ def repeated_show_time():
             traceback.print_exc()
 
             client.group.send_message(group_id, traceback.format_exc().splitlines()[-1])
-            
+
             continue
 
 
