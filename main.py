@@ -365,6 +365,9 @@ def get_image_description(text, hashes):
     big_image_count = hashes.count("toobig")
     hashes = [i for i in hashes if i != "toobig"]
 
+    global staging_images
+    staging_images = [hash for hash in staging_images if hash not in hashes]
+
     if len(hashes) > 0:
         urls = []
         for image_hash in hashes:
@@ -505,11 +508,11 @@ def repeated_main():
                 scheduled_message_time = 1e10
                 last_bot_message_time = 1e10
 
-                if respond_or_not():
-                    for i, message in enumerate(message_history):
-                        if message["username"] != "🦄🦄🦄🦄🦄禁言" and message["image_description"] and isinstance(message["image_description"], list) and i != len(message_history) - 1:
-                            message_history[i]["image_description"] = get_image_description(message["content"], message["image_description"])
+                for i, message in enumerate(message_history):
+                    if message["username"] != "🦄🦄🦄🦄🦄禁言" and message["image_description"] and isinstance(message["image_description"], list) and i != len(message_history) - 1:
+                        message_history[i]["image_description"] = get_image_description(message["content"], message["image_description"])
 
+                if respond_or_not():
                     responds = generate_respond()
 
                     if responds:
@@ -534,9 +537,6 @@ def repeated_main():
             continue
 
 def repeated_show_time():
-    global scheduled_message_time
-    global last_bot_message_time
-
     while True:
         try:
             if scheduled_message_time != 1e10 or last_bot_message_time != 1e10:
@@ -648,7 +648,7 @@ class Callbacks(QQCallbacks):
 
                         global scheduled_message_time
 
-                        scheduled_message_time = time.time() + (20 if "都报" not in message["content"] and "<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>" not in message["content"] else 0)
+                        scheduled_message_time = time.time() + (20 if "都报" not in message["content"] and "<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>" not in message["content"] else 5)
 
                     else:
                         append_history(
@@ -688,10 +688,5 @@ if __name__ == "__main__":
 
     threading.Thread(target=repeated_show_time).start()
 
-    while True:
-        try:
-            client = QQClient(appid, appsecret, 3702, Callbacks())
-            client.run()
-        except Exception:
-            client.group.send_message(group_id, traceback.format_exc().splitlines()[-1])
-            continue
+    client = QQClient(appid, appsecret, 3702, Callbacks())
+    client.run()
