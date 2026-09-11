@@ -72,6 +72,8 @@ def web_search(question):
             try:
                 url = json.loads(completion.choices[0].message.tool_calls[0].function.arguments)["url"]
             except Exception:
+                traceback.print_exc()
+
                 messages.append(
                     {
                         "role": "tool",
@@ -134,6 +136,8 @@ def web_search(question):
                 continue
 
             except Exception:
+                traceback.print_exc()
+
                 messages.append(
                     {
                         "role": "tool",
@@ -141,6 +145,7 @@ def web_search(question):
                         "content": f'访问{url}结果：\n"url访问失败"'
                     }
                 )
+
                 continue
     
         else:
@@ -311,6 +316,8 @@ def generate_respond():
         return response.choices[0].message.content
 
     except openai.BadRequestError:
+        traceback.print_exc()
+
         return "有人说怪话，上文清了"
 
 
@@ -353,6 +360,7 @@ def respond_or_not():
             
             return result["bool"]
         except:
+            traceback.print_exc()
             pass
 
     return False
@@ -533,7 +541,10 @@ def repeated_main():
 
             time.sleep(0.5)
         except Exception:
+            traceback.print_exc()
+
             client.group.send_message(group_id, traceback.format_exc().splitlines()[-1])
+
             continue
 
 def repeated_show_time():
@@ -544,7 +555,10 @@ def repeated_show_time():
 
             time.sleep(2)
         except Exception:
+            traceback.print_exc()
+
             client.group.send_message(group_id, traceback.format_exc().splitlines()[-1])
+            
             continue
 
 
