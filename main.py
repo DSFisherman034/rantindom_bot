@@ -419,7 +419,7 @@ def append_history(username, content, image_description, time):
     global staging_images
     staging_images += [i for i in image_description if i != "toobig"]
 
-    if len(message_history) >= 1 and message_history[-1]["username"] == username and isinstance(message_history[-1]["image_desription"], list):
+    if len(message_history) >= 1 and message_history[-1]["username"] == username and isinstance(message_history[-1]["image_description"], list):
         message_history[-1]["content"] += (f"\n{content}" if content else "")
         message_history[-1]["image_description"] += image_description
 
