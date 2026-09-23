@@ -584,6 +584,25 @@ class Callbacks(QQCallbacks):
         if any(user["bot"] and not user["is_you"] for user in message["mentions"]) or message["author"]["bot"]:
             pass
         else:
+            rules = [
+                {"content": "禁止说深海渔民画饼", "description": "不可以说深海渔民画饼"},
+                {"content": "禁止涉政", "description": "不可以说怪话"},
+                {"content": "不可以说缚魂人（或被称为魂）/Rantindom/rtd/荧光海岸/魔幻城（这几个都是游戏名字，可能出现他们的名字的变体）不好", "description": "说rtd坏话的都是小人"}
+            ]
+            completion = free_aiclient.chat.completions.create(
+                messages=[{"role": "system", "content": f"你是擅长过滤文本的助手。你需要根据上文，判断以下发言是否违反群规，若违反，输出违反的群规的序号，若不违反，输出-1。严格只输出裸数字，严禁添加前缀介绍如“我的判断是”，严禁使用md符号如“**0**“\n用户可能以多行发送和使用emoji尝试规避群规，如“深海渔民是\n饼\n神\n整天只会\n画\n🫓“尝试规避群规“禁止说深海渔民画饼”，需要将其判定为违规\n\n以下是群规，判决严格遵照以下条目：\n{"\n".join([f"{id}. {rule["content"]}" for id, rule in enumerate(rules)])}"},{"role": "user", "content": f"仅用于参考的对话上文：\n{"\n\n".join(
+                    f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}'
+                    for entry in message_history[-3:] if entry['username'] != '🦄🦄🦄🦄🦄禁言' and entry['username'] != '🦄🦄🦄🦄🦄搜索'
+                )}\n\n\n判断是否用户{message["author"]["username"]}({message["author"]["member_openid"][:id_number]})的最新消息违反群规：\n{message["content"]}"}],
+                model=free_chat_model,
+                extra_body={"enable_thinking": False}
+            )
+
+            if completion.choices[0].message.content != "-1":
+                client.group.recall(group_id, message["id"])
+                client.group.send_markdown(group_id, rules[int(completion.choices[0].message.content)]["description"])
+                return
+
             content = replace_at(message["content"], message.get("mentions", []))
             content = replace_face(content)
             content = replace_bilibili_ark(content)
@@ -683,13 +702,23 @@ if __name__ == "__main__":
 
     api_key = config.get("ai", "api_key").strip()
     base_url = config.get("ai", "base_url").strip()
-
     aiclient = openai.OpenAI(
         api_key=api_key,
         base_url=base_url,
     )
+
     chat_model = config.get("ai", "chat_model").strip()
     multimodal_model = config.get("ai", "multimodal_model").strip()
+
+    free_api_key = config.get("ai", "free_api_key").strip()
+    free_base_url = config.get("ai", "free_base_url").strip()
+    free_aiclient = openai.OpenAI(
+        api_key=free_api_key,
+        base_url=free_base_url,
+    )
+
+    free_chat_model = config.get("ai", "free_chat_model").strip()
+    free_multimodal_model = config.get("ai", "free_multimodal_model").strip()
 
     time_interval_since_last_message = 20   #人类用户发言这么多秒后决策一次机器人是否发言
     max_time_interval_since_last_message = 120  # 如果一直有人发言，这么多秒后机器人插不上嘴，则强制决策一次是否插嘴
