@@ -378,6 +378,8 @@ def get_image_description(text, hashes):
 
     if len(hashes) > 0:
         urls = []
+        hashes = list(dict.fromkeys(hashes))
+
         for image_hash in hashes:
             img = Image.open(f"./images/{image_hash}")
             mime = {
