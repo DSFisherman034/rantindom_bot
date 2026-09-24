@@ -577,10 +577,40 @@ class Callbacks(QQCallbacks):
             client.group.mute(group_id, message["author"]["user_openid"], "del")
             return "已解除"
         elif message["author"]["user_openid"] == "27DA648A3E34BFA565FBC1813151AA07":
-            client.group.send_markdown(
-                group_id,
-                message["content"],
-            )
+            if "封禁meme" in message["content"]:
+                image_hashes = []
+                for entry in message["attachments"]:
+                    image_data = requests.get(entry["url"]).content
+
+                    if len(image_data) > 5 * 1024 * 1024:
+                        image_hash = "toobig"
+
+                    else:
+                        img = Image.open(BytesIO(image_data))
+
+                        ratio = img.width / img.height
+                        img = img.resize((512, int(512 / ratio)) if ratio >= 1 else (int(512 * ratio), 512), Image.Resampling.LANCZOS)
+                        buffer = BytesIO()
+                        img.save(buffer, format="PNG")
+                        image_data = buffer.getvalue()
+
+                        image_hash = hashlib.sha256(image_data).hexdigest()
+
+                    image_hashes.append(image_hash)
+
+                with sqlite3.connect("./data.db") as conn:
+                    cursor = conn.cursor()
+                    cursor.execute('CREATE TABLE IF NOT EXISTS banned_memes (id INTEGER PRIMARY KEY, hash STRING)')
+                    for a_hash in image_hashes:
+                        cursor.execute('INSERT INTO banned_memes (hash) VALUES (?)', (a_hash,))
+
+                return f"已封禁{image_hashes}"
+                
+            else:
+                client.group.send_markdown(
+                    group_id,
+                    message["content"],
+                )
 
     def when_get_group_message(self, message):
         if any(user["bot"] and not user["is_you"] for user in message["mentions"]) or message["author"]["bot"]:
@@ -634,6 +664,19 @@ class Callbacks(QQCallbacks):
 
             with sqlite3.connect("./data.db") as conn:
                 cursor = conn.cursor()
+
+                try:
+                    cursor.execute(
+                        f"SELECT COUNT(*) FROM banned_memes WHERE hash IN ({",".join("?" for _ in image_hashes)})", image_hashes
+                    )
+                    if int(cursor.fetchone()[0]) > 0:
+                        client.group.send_markdown(group_id, "发现被封禁的meme")
+                        client.group.recall(group_id, message["id"])
+
+                        return
+
+                except Exception:
+                    pass
 
                 cursor.execute(
                     "SELECT COUNT(*) FROM users WHERE id = ?;",
