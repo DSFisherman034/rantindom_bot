@@ -320,7 +320,6 @@ def generate_respond():
 
         return "有人说怪话，上文清了"
 
-
 def respond_or_not():
     system_prompt = """你是qq机器人，你的名字是“都报”，但你不负责回答用户，你需要根据输入上文，判断是否成员正在找你
 输入中”都报(你)“是机器人输出，其余与此名字不相同的名字均为群成员
@@ -364,7 +363,6 @@ def respond_or_not():
             pass
 
     return False
-
 
 def get_image_description(text, hashes):
     system_prompt = "你需要根据文字输入，描述图片内容。“根据文字输入”意思是，如果文字输入中有特别指定的内容，则需重点描述图片对应部分，如果没有文字输入或无聚焦点，正常描述。文字输入来自社交媒体。如输入“看这个落日”则描述图片中的落日；如果图片中没有落日，即用户指着不是落日的图片说看这落日，需如实描述图片内容而非编造文字指定内容。如输入“啊这”，无任何聚焦，则正常描述图片内容即可，无须特别聚焦于某一区域。若输入多张图片，则每张图片都需要分别描述。不使用md符号，使用单行plaintext"
@@ -415,7 +413,6 @@ def get_image_description(text, hashes):
     else:
         return f"用户上传了{big_image_count}张图片，因它{"们" if big_image_count >= 1 else ""}大于5Mb，故拒绝读取"
 
-
 def append_history(username, content, image_description, time):
     print(f"got image_description: {image_description}")
     global staging_images
@@ -443,7 +440,6 @@ def append_history(username, content, image_description, time):
         if file.is_file() and file.name not in staging_images:
             Path(f"./images/{file.name}").unlink()
 
-
 def replace_at(content, mentions):
     pattern = re.compile(r"<@([A-Za-z0-9]{32})>")
     names = {}
@@ -458,7 +454,6 @@ def replace_at(content, mentions):
     content = pattern.sub(replace_at, content)
 
     return content
-
 
 def replace_face(content):
     pattern = re.compile(r'<faceType=1,faceId="(\d+)",ext="([^"]*)">')
@@ -534,8 +529,17 @@ def repeated_main():
 
                         responds = responds.split("<🦄发送>")
                         for respond in responds:
+                            cost_time = 0
+
+                            for ch in respond:
+                                if '\u4e00' <= ch <= '\u9fff':
+                                    cost_time += 1
+                                else:
+                                    cost_time += 0.25
+
+                            time.sleep(min(cost_time, 20))
+
                             client.group.send_markdown(group_id, respond)
-                            time.sleep(1)
 
                     scheduled_message_time = 1e10
                     last_bot_message_time = time.time()
