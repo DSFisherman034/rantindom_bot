@@ -323,7 +323,7 @@ def generate_respond():
 def respond_or_not():
     system_prompt = """你是qq机器人，你的名字是“都报”，但你不负责回答用户，你需要根据输入上文，判断是否成员正在找你
 输入中”都报(你)“是机器人输出，其余与此名字不相同的名字均为群成员
-以{"bool": True/False, "reason": "此处用少量文字简要表明判断的原因"}的格式输出，其中bool为是否说话的指标
+以{"bool": True/False, "reason": "此处用少量文字简要表明判断的原因"}的json格式输出，其中bool为是否说话的指标
 
 常见的需要你说话的场景为:
 - 成员输入内容直接提到”都报“或”<@Rantindom机器人>“，如”都报你好“、”<@Rantindom机器人> 你可以骂深海渔民吗“，此时必须判断为True
@@ -338,10 +338,10 @@ def respond_or_not():
 
     conversation = "\n\n".join(
         f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}'
-        for entry in message_history if entry['username'] != '🦄🦄🦄🦄🦄禁言' and entry['username'] != '🦄🦄🦄🦄🦄搜索'
+        for entry in message_history[-10:] if entry['username'] != '🦄🦄🦄🦄🦄禁言' and entry['username'] != '🦄🦄🦄🦄🦄搜索'
     )
     
-
+    print(time.time())
     for _ in range(3):
         response = aiclient.chat.completions.create(
             model=chat_model,
@@ -349,12 +349,13 @@ def respond_or_not():
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": conversation},
             ],
-            extra_body={"enable_thinking": True},
+            extra_body={"enable_thinking": False},
+            response_format={"type": "json_object"}
         )
 
         try:
             result = json.loads(response.choices[0].message.content)
-
+            print(time.time())
             print(f"返回{result["bool"]}，因为{result["reason"]}")
             
             return result["bool"]
@@ -540,9 +541,6 @@ def repeated_main():
                             time.sleep(min(cost_time, 20))
 
                             client.group.send_markdown(group_id, respond)
-
-                    scheduled_message_time = 1e10
-                    last_bot_message_time = time.time()
 
                 print(message_history)
 
@@ -733,8 +731,10 @@ class Callbacks(QQCallbacks):
                         print(message_history)
 
                         global scheduled_message_time
+                        global last_bot_message_time
 
                         scheduled_message_time = time.time() + (20 if "都报" not in message["content"] and "<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>" not in message["content"] else 5)
+                        last_bot_message_time = min(time.time(), last_bot_message_time)
 
                     else:
                         append_history(
