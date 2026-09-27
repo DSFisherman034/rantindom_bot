@@ -1,5 +1,4 @@
 sqlite3 data.db
 
-CREATE TABLE users (id	STRING,
-chat		INTEGER
-);
+CREATE TABLE IF NOT EXISTS users (id STRING, chat INTEGER);
+CREATE TABLE IF NOT EXISTS banned_memes (id INTEGER PRIMARY KEY, hash STRING)
