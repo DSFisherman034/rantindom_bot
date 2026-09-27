@@ -11,7 +11,7 @@ import threading
 import uuid
 import configparser
 import trafilatura
-import hashlib
+import imagehash
 from PIL import Image
 from pathlib import Path
 from io import BytesIO
@@ -415,7 +415,6 @@ def get_image_description(text, hashes):
         return f"用户上传了{big_image_count}张图片，因它{"们" if big_image_count >= 1 else ""}大于5Mb，故拒绝读取"
 
 def append_history(username, content, image_description, time):
-    print(f"got image_description: {image_description}")
     global staging_images
     staging_images += [i for i in image_description if i != "toobig"]
 
@@ -596,7 +595,7 @@ class Callbacks(QQCallbacks):
                         img.save(buffer, format="PNG")
                         image_data = buffer.getvalue()
 
-                        image_hash = hashlib.sha256(image_data).hexdigest()
+                        image_hash = str(imagehash.phash(img))
 
                     image_hashes.append(image_hash)
 
@@ -604,7 +603,11 @@ class Callbacks(QQCallbacks):
                     cursor = conn.cursor()
                     cursor.execute('CREATE TABLE IF NOT EXISTS banned_memes (id INTEGER PRIMARY KEY, hash STRING)')
                     for a_hash in image_hashes:
-                        cursor.execute('INSERT INTO banned_memes (hash) VALUES (?)', (a_hash,))
+                        cursor.execute('SELECT COUNT(*) FROM banned_memes WHERE hash = ?', (a_hash,))
+                        count = int(cursor.fetchone()[0])
+
+                        if not count:
+                            cursor.execute('INSERT INTO banned_memes (hash) VALUES (?)', (a_hash,))
 
                 return f"已封禁{image_hashes}"
                 
@@ -657,7 +660,7 @@ class Callbacks(QQCallbacks):
                     img.save(buffer, format="PNG")
                     image_data = buffer.getvalue()
 
-                    image_hash = hashlib.sha256(image_data).hexdigest()
+                    image_hash = str(imagehash.phash(img))
 
                     with open(f"./images/{image_hash}", "wb") as file:
                         file.write(image_data)
@@ -669,16 +672,18 @@ class Callbacks(QQCallbacks):
 
                 try:
                     cursor.execute(
-                        f"SELECT COUNT(*) FROM banned_memes WHERE hash IN ({",".join("?" for _ in image_hashes)})", image_hashes
+                        "SELECT hash FROM banned_memes"
                     )
-                    if int(cursor.fetchone()[0]) > 0:
+                    banned_hashes = [hash[0] for hash in cursor.fetchall()]
+
+                    if any(imagehash.hex_to_hash(image_hash) - imagehash.hex_to_hash(banned_hash) < 5 if image_hash != "toobig" else False for image_hash in image_hashes for banned_hash in banned_hashes):
                         client.group.send_markdown(group_id, "发现被封禁的meme")
                         client.group.recall(group_id, message["id"])
 
                         return
 
                 except Exception:
-                    pass
+                    traceback.print_exc()
 
                 cursor.execute(
                     "SELECT COUNT(*) FROM users WHERE id = ?;",
