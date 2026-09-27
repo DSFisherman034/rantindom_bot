@@ -344,12 +344,12 @@ def respond_or_not():
     print(time.time())
     for _ in range(3):
         response = aiclient.chat.completions.create(
-            model=chat_model,
+            model=choice_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": conversation},
             ],
-            extra_body={"enable_thinking": False},
+            extra_body={"enable_thinking": True},
             response_format={"type": "json_object"}
         )
 
@@ -758,6 +758,7 @@ if __name__ == "__main__":
 
     chat_model = config.get("ai", "chat_model").strip()
     multimodal_model = config.get("ai", "multimodal_model").strip()
+    choice_model = config.get("ai", "choice_model").strip()
 
     free_api_key = config.get("ai", "free_api_key").strip()
     free_base_url = config.get("ai", "free_base_url").strip()
