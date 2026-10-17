@@ -17,6 +17,7 @@ from pathlib import Path
 from io import BytesIO
 from urllib.parse import urlparse
 import traceback
+import os
 
 
 def web_search(question):
@@ -574,13 +575,13 @@ class Callbacks(QQCallbacks):
         self.last_message_id = None
 
     def when_get_dc_message(self, message):
-        if message["content"] == "🦄🦄🦄🦄🦄解除禁言":
-            client.group.mute(group_id, message["author"]["user_openid"], "del")
+        if message.content == "🦄🦄🦄🦄🦄解除禁言":
+            client.group.mute(group_id, message.author.user_openid, "del")
             return "已解除"
-        elif message["author"]["user_openid"] == "27DA648A3E34BFA565FBC1813151AA07":
-            if "封禁meme" in message["content"]:
+        elif message.author.user_openid == "27DA648A3E34BFA565FBC1813151AA07":
+            if "封禁meme" in message.content:
                 image_hashes = []
-                for entry in message["attachments"]:
+                for entry in message.attachments:
                     image_data = requests.get(entry["url"]).content
 
                     if len(image_data) > 5 * 1024 * 1024:
@@ -610,15 +611,18 @@ class Callbacks(QQCallbacks):
                             cursor.execute('INSERT INTO banned_memes (hash) VALUES (?)', (a_hash,))
 
                 return f"已封禁{image_hashes}"
+
+            elif message.content == "🦄🦄🦄🦄🦄重启":
+                os._exit(0)
                 
             else:
                 client.group.send_markdown(
                     group_id,
-                    message["content"],
+                    message.content,
                 )
 
     def when_get_group_message(self, message):
-        if any(user["bot"] and not user["is_you"] for user in message["mentions"]) or message["author"]["bot"]:
+        if any(user["bot"] and not user["is_you"] for user in message.mentions) or message.author.bot:
             pass
         else:
             rules = [
@@ -630,22 +634,22 @@ class Callbacks(QQCallbacks):
                 messages=[{"role": "system", "content": f"你是擅长过滤文本的助手。你需要根据上文，判断以下发言是否违反群规，若违反，输出违反的群规的序号，若不违反，输出-1。严格只输出裸数字，严禁添加前缀介绍如“我的判断是”，严禁使用md符号如“**0**“\n用户可能以多行发送和使用emoji尝试规避群规，如“深海渔民是\n饼\n神\n整天只会\n画\n🫓“尝试规避群规“禁止说深海渔民画饼”，需要将其判定为违规\n\n以下是群规，判决严格遵照以下条目：\n{"\n".join([f"{id}. {rule["content"]}" for id, rule in enumerate(rules)])}"},{"role": "user", "content": f"仅用于参考的对话上文：\n{"\n\n".join(
                     f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}'
                     for entry in message_history[-3:] if entry['username'] != '🦄🦄🦄🦄🦄禁言' and entry['username'] != '🦄🦄🦄🦄🦄搜索'
-                )}\n\n\n判断是否用户{message["author"]["username"]}({message["author"]["member_openid"][:id_number]})的最新消息违反群规：\n{message["content"]}"}],
+                )}\n\n\n判断是否用户{message.author.username}({message.author.member_openid[:id_number]})的最新消息违反群规：\n{message.content}"}],
                 model=free_chat_model,
                 extra_body={"enable_thinking": False}
             )
 
             if completion.choices[0].message.content != "-1":
-                client.group.recall(group_id, message["id"])
+                client.group.recall(group_id, message.id)
                 client.group.send_markdown(group_id, rules[int(completion.choices[0].message.content)]["description"])
                 return
 
-            content = replace_at(message["content"], message.get("mentions", []))
+            content = replace_at(message.content, message.get("mentions", []))
             content = replace_face(content)
             content = replace_bilibili_ark(content)
 
             image_hashes = []
-            for entry in message["attachments"]:
+            for entry in message.attachments:
                 image_data = requests.get(entry["url"]).content
 
                 if len(image_data) > 5 * 1024 * 1024:
@@ -678,7 +682,7 @@ class Callbacks(QQCallbacks):
 
                     if any(imagehash.hex_to_hash(image_hash) - imagehash.hex_to_hash(banned_hash) < 5 if image_hash != "toobig" else False for image_hash in image_hashes for banned_hash in banned_hashes):
                         client.group.send_markdown(group_id, "发现被封禁的meme")
-                        client.group.recall(group_id, message["id"])
+                        client.group.recall(group_id, message.id)
 
                         return
 
@@ -687,50 +691,50 @@ class Callbacks(QQCallbacks):
 
                 cursor.execute(
                     "SELECT COUNT(*) FROM users WHERE id = ?;",
-                    (message["author"]["member_openid"],),
+                    (message.author.member_openid,),
                 )
                 count = cursor.fetchone()
                 if count[0] == 0:
                     cursor.execute(
                         "INSERT INTO users (id, chat) VALUES (?, ?)",
-                        (message["author"]["member_openid"], 1),
+                        (message.author.member_openid, 1),
                     )
 
                 if "🦄🦄🦄🦄🦄忽略我" in content:
                     cursor.execute(
                         "UPDATE users SET chat = 0 WHERE id = ?",
-                        (message["author"]["member_openid"],),
+                        (message.author.member_openid,),
                     )
                     client.group.send_markdown(
                         group_id,
                         f"听不见你说话了，{message['author']['username']}",
-                        message["id"],
+                        message.id,
                     )
 
                 elif "🦄🦄🦄🦄🦄听我说" in content:
                     cursor.execute(
                         "UPDATE users SET chat = 1 WHERE id = ?",
-                        (message["author"]["member_openid"],),
+                        (message.author.member_openid,),
                     )
                     client.group.send_markdown(
                         group_id,
                         f"听见你了，{message['author']['username']}",
-                        message["id"],
+                        message.id,
                     )
 
                 else:
                     cursor.execute(
                         "SELECT chat FROM users WHERE id = ?",
-                        (message["author"]["member_openid"],),
+                        (message.author.member_openid,),
                     )
                     chat_or_not = bool(cursor.fetchone()[0])
 
                     if chat_or_not:
                         append_history(
-                            f"{message["author"]["username"]}({message["author"]["member_openid"][:id_number]})",
-                            f"{content}{f'\n(附带上文引用内容：\n{message["quote"]["content"]}\n)' if message['quote']['content'] else ''}",
+                            f"{message.author.username}({message.author.member_openid[:id_number]})",
+                            f"{content}{f'\n(附带上文引用内容：\n{message.quote.content}\n)' if message['quote']['content'] else ''}",
                             image_hashes,
-                            replace_time(message["timestamp"])
+                            replace_time(message.timestamp)
                         )
 
                         print(message_history)
@@ -738,12 +742,12 @@ class Callbacks(QQCallbacks):
                         global scheduled_message_time
                         global last_bot_message_time
 
-                        scheduled_message_time = time.time() + (20 if "都报" not in message["content"] and "<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>" not in message["content"] else 5)
+                        scheduled_message_time = time.time() + (20 if "都报" not in message.content and "<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>" not in message.content else 5)
                         last_bot_message_time = min(time.time(), last_bot_message_time)
 
                     else:
                         append_history(
-                            "unknown", "（此条信息发送者决定不让你看他的消息）", [], replace_time(message["timestamp"])
+                            "unknown", "（此条信息发送者决定不让你看他的消息）", [], replace_time(message.timestamp)
                         )
 
 if __name__ == "__main__":
