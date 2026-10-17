@@ -446,7 +446,7 @@ def replace_at(content, mentions):
     names = {}
 
     for user in mentions:
-        names[user["member_openid"]] = user["username"]
+        names[user.openid] = user.username
 
     def replace_at(m):
         id = m.group(1)
@@ -622,7 +622,7 @@ class Callbacks(QQCallbacks):
                 )
 
     def when_get_group_message(self, message):
-        if any(user["bot"] and not user["is_you"] for user in message.mentions) or message.author.bot:
+        if any(user.is_bot and not user.is_you for user in message.mentions) or message.author.is_bot:
             pass
         else:
             rules = [
@@ -634,7 +634,7 @@ class Callbacks(QQCallbacks):
                 messages=[{"role": "system", "content": f"你是擅长过滤文本的助手。你需要根据上文，判断以下发言是否违反群规，若违反，输出违反的群规的序号，若不违反，输出-1。严格只输出裸数字，严禁添加前缀介绍如“我的判断是”，严禁使用md符号如“**0**“\n用户可能以多行发送和使用emoji尝试规避群规，如“深海渔民是\n饼\n神\n整天只会\n画\n🫓“尝试规避群规“禁止说深海渔民画饼”，需要将其判定为违规\n\n以下是群规，判决严格遵照以下条目：\n{"\n".join([f"{id}. {rule["content"]}" for id, rule in enumerate(rules)])}"},{"role": "user", "content": f"仅用于参考的对话上文：\n{"\n\n".join(
                     f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}'
                     for entry in message_history[-3:] if entry['username'] != '🦄🦄🦄🦄🦄禁言' and entry['username'] != '🦄🦄🦄🦄🦄搜索'
-                )}\n\n\n判断是否用户{message.author.username}({message.author.member_openid[:id_number]})的最新消息违反群规：\n{message.content}"}],
+                )}\n\n\n判断是否用户{message.author.username}({message.author.openid[:id_number]})的最新消息违反群规：\n{message.content}"}],
                 model=free_chat_model,
                 extra_body={"enable_thinking": False}
             )
@@ -644,7 +644,7 @@ class Callbacks(QQCallbacks):
                 client.group.send_markdown(group_id, rules[int(completion.choices[0].message.content)]["description"])
                 return
 
-            content = replace_at(message.content, message.get("mentions", []))
+            content = replace_at(message.content, message.mentions)
             content = replace_face(content)
             content = replace_bilibili_ark(content)
 
@@ -691,19 +691,19 @@ class Callbacks(QQCallbacks):
 
                 cursor.execute(
                     "SELECT COUNT(*) FROM users WHERE id = ?;",
-                    (message.author.member_openid,),
+                    (message.author.openid,),
                 )
                 count = cursor.fetchone()
                 if count[0] == 0:
                     cursor.execute(
                         "INSERT INTO users (id, chat) VALUES (?, ?)",
-                        (message.author.member_openid, 1),
+                        (message.author.openid, 1),
                     )
 
                 if "🦄🦄🦄🦄🦄忽略我" in content:
                     cursor.execute(
                         "UPDATE users SET chat = 0 WHERE id = ?",
-                        (message.author.member_openid,),
+                        (message.author.openid,),
                     )
                     client.group.send_markdown(
                         group_id,
@@ -714,7 +714,7 @@ class Callbacks(QQCallbacks):
                 elif "🦄🦄🦄🦄🦄听我说" in content:
                     cursor.execute(
                         "UPDATE users SET chat = 1 WHERE id = ?",
-                        (message.author.member_openid,),
+                        (message.author.openid,),
                     )
                     client.group.send_markdown(
                         group_id,
@@ -725,14 +725,14 @@ class Callbacks(QQCallbacks):
                 else:
                     cursor.execute(
                         "SELECT chat FROM users WHERE id = ?",
-                        (message.author.member_openid,),
+                        (message.author.openid,),
                     )
                     chat_or_not = bool(cursor.fetchone()[0])
 
                     if chat_or_not:
                         append_history(
-                            f"{message.author.username}({message.author.member_openid[:id_number]})",
-                            f"{content}{f'\n(附带上文引用内容：\n{message.quote.content}\n)' if message['quote']['content'] else ''}",
+                            f"{message.author.username}({message.author.openid[:id_number]})",
+                            f"{content}{f'\n(附带上文引用内容：\n{message.quote.content}\n)' if message.quote.content1 else ''}",
                             image_hashes,
                             replace_time(message.timestamp)
                         )
