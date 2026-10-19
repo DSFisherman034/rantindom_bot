@@ -7,7 +7,6 @@ import json
 import base64
 import requests
 import time
-import threading
 import uuid
 import configparser
 import trafilatura
@@ -18,6 +17,7 @@ from io import BytesIO
 from urllib.parse import urlparse
 import traceback
 import os
+import asyncio
 
 
 def web_search(question):
@@ -152,7 +152,7 @@ def web_search(question):
         else:
             return completion.choices[0].message.content
 
-def generate_respond():
+async def generate_respond():
     system_prompt = r"""
 <general>
 你是一个qq机器人，你的名字叫“都报”，你需要输出短句，尽可能表演的像在qq群里聊天的人类，对用户问题做出回复
@@ -176,7 +176,8 @@ def generate_respond():
 </rule>
 
 <reference>
-- ”<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>“是在@你
+- ”<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>“是在@你，”<@神(5BA65C9F4D6E55B55892CE51A421A485)>“是另一机器人
+- 你可以@机器人“神”（这是他的名字）并与他聊天。这一机器人搭载了非常老旧过时的ai模型，不具备搜索功能，因此不能用于解决问题，仅用于活跃气氛
 - 用户名仅“深海渔民(27DA648A3E34BFA565FBC1813151AA07)”是开发者深海渔民本人，其他同音或形近字均不是深海渔民本人
 - author名字固定格式为“username(id)“以辅助区分，username相同但id不同应当被理解为不同但同名的用户。通过author给出的名字称呼用户时，不要输出括号和其中的id，只使用括号外的username
 </reference>
@@ -294,7 +295,7 @@ def generate_respond():
                 args = json.loads(tool_call.function.arguments)
 
                 if tool_call.function.name == "mute":
-                    client.group.mute(group_id, **args)
+                    await client.group.mute(group_id, **args)
                     message_history.append({
                         "username": "🦄🦄🦄🦄🦄禁言",
                         "op": args["op"],
@@ -303,7 +304,7 @@ def generate_respond():
                     })
 
                 elif tool_call.function.name == "web_search":
-                    client.group.send_markdown(group_id, response.choices[0].message.content)
+                    await client.group.send_markdown(group_id, response.choices[0].message.content)
 
                     answer = web_search(**args)
                     message_history.append({
@@ -312,7 +313,8 @@ def generate_respond():
                         "answer": answer
                     })
 
-                    client.group.send_markdown(group_id, generate_respond())
+                    respond = await generate_respond()
+                    await client.group.send_markdown(group_id, respond)
 
         return response.choices[0].message.content
 
@@ -503,7 +505,7 @@ def replace_bilibili_ark(content):
         return "<一个未知的bilibili视频>"
     return content
 
-def repeated_main():
+async def repeated_main():
     global scheduled_message_time
     global last_bot_message_time
 
@@ -523,7 +525,7 @@ def repeated_main():
                     if len(message_history) >= 1 and message_history[-1]["username"] != "🦄🦄🦄🦄🦄禁言" and message_history[-1]["image_description"] and isinstance(message_history[-1]["image_description"], list):
                         message_history[-1]["image_description"] = get_image_description(message_history[-1]["content"], message_history[-1]["image_description"])
 
-                    responds = generate_respond()
+                    responds = await generate_respond()
 
                     if responds:
                         append_history("🦄🦄🦄🦄🦄都报", responds, [], time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
@@ -538,34 +540,34 @@ def repeated_main():
                                 else:
                                     cost_time += 0.25
 
-                            time.sleep(min(cost_time, 20))
+                            await asyncio.sleep(min(cost_time, 20))
 
-                            client.group.send_markdown(group_id, respond)
+                            await client.group.send_markdown(group_id, respond)
 
                 print(message_history)
 
             if scheduled_message_time == 1e10 and last_bot_message_time <= time.time() - max_time_interval_since_last_message:
                 last_bot_message_time = 1e10
 
-            time.sleep(0.5)
+            await asyncio.sleep(0.5)
         except Exception:
             traceback.print_exc()
 
-            client.group.send_message(group_id, traceback.format_exc().splitlines()[-1])
+            await client.group.send_message(group_id, traceback.format_exc().splitlines()[-1])
 
             continue
 
-def repeated_show_time():
+async def repeated_show_time():
     while True:
         try:
             if scheduled_message_time != 1e10 or last_bot_message_time != 1e10:
                 print(f"当前时间: {time.time()}, scheduled_message_time: {scheduled_message_time}, last_bot_message_time: {last_bot_message_time}, 预估下次决策时间：{min(scheduled_message_time - time.time(), last_bot_message_time + max_time_interval_since_last_message - time.time())}秒后")
 
-            time.sleep(2)
+            await asyncio.sleep(2)
         except Exception:
             traceback.print_exc()
 
-            client.group.send_message(group_id, traceback.format_exc().splitlines()[-1])
+            await client.group.send_message(group_id, traceback.format_exc().splitlines()[-1])
 
             continue
 
@@ -574,9 +576,9 @@ class Callbacks(QQCallbacks):
     def __init__(self):
         self.last_message_id = None
 
-    def when_get_dc_message(self, message):
+    async def when_get_dc_message(self, message):
         if message.content == "🦄🦄🦄🦄🦄解除禁言":
-            client.group.mute(group_id, message.author.user_openid, "del")
+            await client.group.mute(group_id, message.author.user_openid, "del")
             return "已解除"
         elif message.author.user_openid == "27DA648A3E34BFA565FBC1813151AA07":
             if "封禁meme" in message.content:
@@ -616,13 +618,13 @@ class Callbacks(QQCallbacks):
                 os._exit(0)
                 
             else:
-                client.group.send_markdown(
+                await client.group.send_markdown(
                     group_id,
                     message.content,
                 )
 
-    def when_get_group_message(self, message):
-        if any(user.is_bot and not user.is_you for user in message.mentions) or message.author.is_bot:
+    async def when_get_group_message(self, message):
+        if all(user.is_bot and not user.is_you and not user.openid == "5BA65C9F4D6E55B55892CE51A421A485" for user in message.mentions) or (message.author.is_bot and message.author.openid != "5BA65C9F4D6E55B55892CE51A421A485"):
             pass
         else:
             rules = [
@@ -640,8 +642,8 @@ class Callbacks(QQCallbacks):
             )
 
             if completion.choices[0].message.content != "-1":
-                client.group.recall(group_id, message.id)
-                client.group.send_markdown(group_id, rules[int(completion.choices[0].message.content)]["description"])
+                await client.group.recall(group_id, message.id)
+                await client.group.send_markdown(group_id, rules[int(completion.choices[0].message.content)]["description"])
                 return
 
             content = replace_at(message.content, message.mentions)
@@ -681,8 +683,8 @@ class Callbacks(QQCallbacks):
                     banned_hashes = [hash[0] for hash in cursor.fetchall()]
 
                     if any(imagehash.hex_to_hash(image_hash) - imagehash.hex_to_hash(banned_hash) < 5 if image_hash != "toobig" else False for image_hash in image_hashes for banned_hash in banned_hashes):
-                        client.group.send_markdown(group_id, "发现被封禁的meme")
-                        client.group.recall(group_id, message.id)
+                        await client.group.send_markdown(group_id, "发现被封禁的meme")
+                        await client.group.recall(group_id, message.id)
 
                         return
 
@@ -705,7 +707,7 @@ class Callbacks(QQCallbacks):
                         "UPDATE users SET chat = 0 WHERE id = ?",
                         (message.author.openid,),
                     )
-                    client.group.send_markdown(
+                    await client.group.send_markdown(
                         group_id,
                         f"听不见你说话了，{message['author']['username']}",
                         message.id,
@@ -716,7 +718,7 @@ class Callbacks(QQCallbacks):
                         "UPDATE users SET chat = 1 WHERE id = ?",
                         (message.author.openid,),
                     )
-                    client.group.send_markdown(
+                    await client.group.send_markdown(
                         group_id,
                         f"听见你了，{message['author']['username']}",
                         message.id,
@@ -732,7 +734,7 @@ class Callbacks(QQCallbacks):
                     if chat_or_not:
                         append_history(
                             f"{message.author.username}({message.author.openid[:id_number]})",
-                            f"{content}{f'\n(附带上文引用内容：\n{message.quote.content}\n)' if message.quote.content1 else ''}",
+                            f"{content}{f'\n(附带上文引用内容：\n{message.quote.content}\n)' if message.quote.content else ''}",
                             image_hashes,
                             replace_time(message.timestamp)
                         )
@@ -749,6 +751,12 @@ class Callbacks(QQCallbacks):
                         append_history(
                             "unknown", "（此条信息发送者决定不让你看他的消息）", [], replace_time(message.timestamp)
                         )
+
+async def main():
+    task1 = asyncio.create_task(repeated_main())
+    task2 = asyncio.create_task(repeated_show_time())
+
+    await asyncio.gather(client.run(), task1, task2)
 
 if __name__ == "__main__":
     config = configparser.ConfigParser()
@@ -789,10 +797,5 @@ if __name__ == "__main__":
 
     staging_images = []
 
-    t = threading.Thread(target=repeated_main)
-    t.start()
-
-    threading.Thread(target=repeated_show_time).start()
-
-    client = QQClient(appid, appsecret, 3702, Callbacks())
-    client.run()
+    client = QQClient(appid, appsecret, "127.0.0.1", 3702, Callbacks())
+    asyncio.run(main())
