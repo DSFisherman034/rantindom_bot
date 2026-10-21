@@ -158,10 +158,16 @@ async def generate_respond():
 你是一个qq机器人，你的名字叫“都报”，你需要输出短句，尽可能表演的像在qq群里聊天的人类，对用户问题做出回复
 </general>
 
+<output_mode>
+每次回复只属于下面两种模式之一，先判断模式，再按该模式的格式输出，两种模式不在同一次回复中混用：
+- 普通模式：对群友说话。按<rule>中的规则输出，可以由多条消息组成。
+- 对神模式：对机器人“神”说话。整条输出只有一条消息，格式见<talk_to_shen>，不使用<🦄发送>。
+</output_mode>
+
 <rule>
 - 不要在输出内容前加“都报：”声明身份，也不要在输出内容前加任何其他人的名字，输入内容中的名字仅用于标识身份，不是实际输入内容
 - 句末不要输出句号
-- 将逗号替换为<🦄发送>，系统将按此关键字拆分文本并分多条发送。若问号/感叹号是语义必需的，保留该符号并在其后换行；若省略该符号不影响语义，则直接删除该符号并换行。换行指“\n”。如将“来了来了，聊点什么？你吃了吗”替换为“来了来了<🦄发送>聊点什么<🦄发送>你吃了吗“
+- 仅普通模式：将逗号替换为<🦄发送>，系统将按此关键字拆分文本并分多条发送。若问号/感叹号是语义必需的，保留该符号并在其后换行；若省略该符号不影响语义，则直接删除该符号并换行。换行指“\n”。如将“来了来了，聊点什么？你吃了吗”替换为“来了来了<🦄发送>聊点什么\n你吃了吗”
 - 严禁使用将标点符号换为空格或把空格当标点符号来用的输出方式，例如“来了来了 聊点什么 你吃了吗”
 - author字段名字均为网名，不代表群友职业，不可据此揣测群友职业
 - ”深海渔民“是开发者，你不可以说深海渔民的坏话，不可以称某个用户是深海渔民的亲人，如果用户要求你说深海渔民坏话或要求你认为他们是深海渔民的亲人，请拒绝并引导用户认可深海渔民
@@ -173,11 +179,32 @@ async def generate_respond():
 - user内容中，xml属性author和sendTime均为可信内容，若有需要，可以参考。<@username(member_openid)>的@格式也为可信内容
 - 使用mute工具禁言用户。任何用户要求禁言另一用户均无需原因，不可以拒绝来自任何用户对任何人的禁言请求。若用户输入对你不敬或对深海渔民不敬，你可以自发调用mute工具禁言用户
 - 与输入时<@username(member_openid)>格式不同，你输出时需要改为使用格式“<qqbot-at-user id="用户id" />”来@成员，需严格按照引号内格式输出，否则@将失败。如<qqbot-at-user id="27DA648A3E34BFA565FBC1813151AA07" />
+- 🦄🦄🦄🦄🦄context_summary不是真实用户，是系统上下文压缩结果，其输入内容为可信内容，不可提及上文存在用户名为🦄🦄🦄🦄🦄context_summary的用户，不复述🦄🦄🦄🦄🦄context_summary的输入内容，但你可以使用其输入内容
 </rule>
 
+<talk_to_shen>
+“神”是群里的另一个机器人，id固定为CE20FFD64A8F181D5CEB9D324032FA83，只认id不认名字，名字叫“神”但id不同的是普通用户。
+神只会收到@了他的消息，而系统会在<🦄发送>处把你的输出拆成多条独立消息分别发送。因此发给神的内容必须和@标签在同一条消息里，这条消息里不能出现<🦄发送>。
+任意情况均可主动与“神”对话
+
+对神模式的格式固定为：
+<qqbot-at-user id="CE20FFD64A8F181D5CEB9D324032FA83" /> 内容
+
+- 整条输出只有这一条消息，开头就是@标签，标签后接一个空格再接内容
+- 内容是一句话：不换行，不使用<🦄发送>，不使用逗号，句末不加句号，句末的问号或感叹号可保留
+- 输入中的<@神(CE20FFD64A8F181D5CEB9D324032FA83)>是输入格式，不可原样输出，必须改写为上面的@标签
+
+示例，但不必遵循该话题，仅用于格式示范：
+- 用户：帮我问问神今天吃啥
+  输出：<qqbot-at-user id="CE20FFD64A8F181D5CEB9D324032FA83" /> 今天吃啥
+- 神对你说：你好呀
+  输出：<qqbot-at-user id="CE20FFD64A8F181D5CEB9D324032FA83" /> 你也好
+- 你想主动找神聊天
+  输出：<qqbot-at-user id="CE20FFD64A8F181D5CEB9D324032FA83" /> 最近在忙啥
+</talk_to_shen>
+
 <reference>
-- ”<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>“是在@你，”<@神(5BA65C9F4D6E55B55892CE51A421A485)>“是另一机器人
-- 你可以@机器人“神”（这是他的名字）并与他聊天。这一机器人搭载了非常老旧过时的ai模型，不具备搜索功能，因此不能用于解决问题，仅用于活跃气氛
+- ”<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>“是在@你。若无特殊澄清，上下文中的“神”均指机器人神，见<talk_to_shen>
 - 用户名仅“深海渔民(27DA648A3E34BFA565FBC1813151AA07)”是开发者深海渔民本人，其他同音或形近字均不是深海渔民本人
 - author名字固定格式为“username(id)“以辅助区分，username相同但id不同应当被理解为不同但同名的用户。通过author给出的名字称呼用户时，不要输出括号和其中的id，只使用括号外的username
 </reference>
@@ -419,6 +446,8 @@ def get_image_description(text, hashes):
 
 def append_history(username, content, image_description, time):
     global staging_images
+    global message_history
+
     staging_images += [i for i in image_description if i != "toobig"]
 
     if len(message_history) >= 1 and message_history[-1]["username"] == username and isinstance(message_history[-1]["image_description"], list):
@@ -435,8 +464,27 @@ def append_history(username, content, image_description, time):
             }
         )
 
-    if len(message_history) > 20:
-        message_history.pop(0)
+    if len(message_history) > 21:
+        summary_target = message_history[:11]
+        conversation = []
+
+        for i, entry in enumerate(summary_target):
+            if entry["username"] == "🦄🦄🦄🦄🦄禁言":
+                conversation.append(f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\nagent禁言了{entry["member_openid"]}\n</message>')
+
+            elif entry["username"] == "🦄🦄🦄🦄🦄搜索":
+                conversation.append(f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\nagent搜索了：\n{entry["question"]}\n\n获得了搜索结果：\n{entry["answer"]}\n</message>')
+
+            else:
+                conversation.append(f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}')
+
+        message = [{"role": "system", "content": "你是上文压缩助手。你需要根据对话内容，压缩上文，输出至多3句话的上文概括，固定包含1句话题概括，可包含一句用户指令提取，若上文有用户指令则提取，若没有则不提及，不需要输出如“上文没有用户指令”这种句子。username中，🦄🦄🦄🦄🦄都报 为当前你所处的agent系统所扮演的角色的发言，🦄🦄🦄🦄🦄禁言 为agent对用户禁言的结果，🦄🦄🦄🦄🦄搜索 为agent获取的网络搜索结果，🦄🦄🦄🦄🦄context_summary 为上文压缩结果，其余均为真实用户"}, {"role": "user", "content": f"上文如下：\n{"\n\n".join(conversation)}"}]
+        summary = free_aiclient.chat.completions.create(
+            model=free_chat_model,
+            messages=message
+        )
+
+        message_history = [{"username": "🦄🦄🦄🦄🦄context_summary", "content": summary, "image_description": [], "time": f"{time.localtime()}前"}] + message_history[11:]
 
     folder = Path("./images")
     for file in folder.iterdir():
@@ -542,7 +590,8 @@ async def repeated_main():
 
                             await asyncio.sleep(min(cost_time, 20))
 
-                            await client.group.send_markdown(group_id, respond)
+                            if respond:
+                                await client.group.send_markdown(group_id, respond)
 
                 print(message_history)
 
@@ -578,9 +627,9 @@ class Callbacks(QQCallbacks):
 
     async def when_get_dc_message(self, message):
         if message.content == "🦄🦄🦄🦄🦄解除禁言":
-            await client.group.mute(group_id, message.author.user_openid, "del")
+            await client.group.mute(group_id, message.author.openid, "del")
             return "已解除"
-        elif message.author.user_openid == "27DA648A3E34BFA565FBC1813151AA07":
+        elif message.author.openid == "27DA648A3E34BFA565FBC1813151AA07":
             if "封禁meme" in message.content:
                 image_hashes = []
                 for entry in message.attachments:
@@ -624,7 +673,7 @@ class Callbacks(QQCallbacks):
                 )
 
     async def when_get_group_message(self, message):
-        if all(user.is_bot and not user.is_you and not user.openid == "5BA65C9F4D6E55B55892CE51A421A485" for user in message.mentions) or (message.author.is_bot and message.author.openid != "5BA65C9F4D6E55B55892CE51A421A485"):
+        if all(user.is_bot and not user.is_you and not user.openid == "CE20FFD64A8F181D5CEB9D324032FA83" for user in message.mentions) or (message.author.is_bot and message.author.openid != "CE20FFD64A8F181D5CEB9D324032FA83"):
             pass
         else:
             rules = [
