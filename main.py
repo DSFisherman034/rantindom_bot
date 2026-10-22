@@ -485,7 +485,7 @@ def append_history(username, content, image_description, time):
             messages=message
         )
 
-        message_history = [{"username": "🦄🦄🦄🦄🦄context_summary", "content": summary, "image_description": [], "time": f"{time.localtime()}前"}] + message_history[11:]
+        message_history = [{"username": "🦄🦄🦄🦄🦄context_summary", "content": summary, "image_description": [], "time": f"{message_history[10]["time"]}前"}] + message_history[11:]
 
     folder = Path("./images")
     for file in folder.iterdir():
