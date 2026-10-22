@@ -424,7 +424,8 @@ def get_image_description(text, hashes):
 
             urls.append(f"data:{mime};base64,{image_base64}")
 
-            Path(f"./images/{image_hash}").unlink()
+            if all(image_hash not in message["image_description"] for message in message_history if isinstance(message["image_description"], list)):
+                Path(f"./images/{image_hash}").unlink()
 
         respond = aiclient.chat.completions.create(
             messages=[
@@ -673,7 +674,7 @@ class Callbacks(QQCallbacks):
                 )
 
     async def when_get_group_message(self, message):
-        if all(user.is_bot and not user.is_you and not user.openid == "CE20FFD64A8F181D5CEB9D324032FA83" for user in message.mentions) or (message.author.is_bot and message.author.openid != "CE20FFD64A8F181D5CEB9D324032FA83"):
+        if (all(user.is_bot and not user.is_you and not user.openid == "CE20FFD64A8F181D5CEB9D324032FA83" for user in message.mentions) if message.mentions else False) or (message.author.is_bot and message.author.openid != "CE20FFD64A8F181D5CEB9D324032FA83"):
             pass
         else:
             rules = [
