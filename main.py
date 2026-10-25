@@ -360,6 +360,7 @@ def respond_or_not():
 - 上文“都报”与其他用户的交流尚未完结
 - “都报”参与了上文话题，此时用户对上文话题做补充或追问
 - 用户提出了一个问题，而机器人搭载的ai可能知道答案
+- 用户暗示在与都报对话，即使没有明确指名道姓
 
 常见的不需要你说话的场景为:
 - 有成员明确需要你不再发言
@@ -485,7 +486,7 @@ def append_history(username, content, image_description, time):
             messages=message
         )
 
-        message_history = [{"username": "🦄🦄🦄🦄🦄context_summary", "content": summary, "image_description": [], "time": f"{message_history[10]["time"]}前"}] + message_history[11:]
+        message_history = [{"username": "🦄🦄🦄🦄🦄context_summary", "content": summary.choices[0].message.content, "image_description": [], "time": f"{message_history[10]["time"]}前"}] + message_history[11:]
 
     folder = Path("./images")
     for file in folder.iterdir():
@@ -580,7 +581,7 @@ async def repeated_main():
                         append_history("🦄🦄🦄🦄🦄都报", responds, [], time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
 
                         responds = responds.split("<🦄发送>")
-                        for respond in responds:
+                        for i, respond in enumerate(responds):
                             cost_time = 0
 
                             for ch in respond:
@@ -589,7 +590,7 @@ async def repeated_main():
                                 else:
                                     cost_time += 0.25
 
-                            await asyncio.sleep(min(cost_time, 20))
+                            await asyncio.sleep(min(cost_time, 20, 999 if i >= 1 else 0))
 
                             if respond:
                                 await client.group.send_markdown(group_id, respond)
@@ -677,24 +678,24 @@ class Callbacks(QQCallbacks):
         if (all(user.is_bot and not user.is_you and not user.openid == "CE20FFD64A8F181D5CEB9D324032FA83" for user in message.mentions) if message.mentions else False) or (message.author.is_bot and message.author.openid != "CE20FFD64A8F181D5CEB9D324032FA83"):
             pass
         else:
-            rules = [
-                {"content": "禁止说深海渔民画饼", "description": "不可以说深海渔民画饼"},
-                {"content": "禁止涉政", "description": "不可以说怪话"},
-                {"content": "不可以说缚魂人（或被称为魂）/Rantindom/rtd/荧光海岸/魔幻城（这几个都是游戏名字，可能出现他们的名字的变体）不好", "description": "说rtd坏话的都是小人"}
-            ]
-            completion = free_aiclient.chat.completions.create(
-                messages=[{"role": "system", "content": f"你是擅长过滤文本的助手。你需要根据上文，判断以下发言是否违反群规，若违反，输出违反的群规的序号，若不违反，输出-1。严格只输出裸数字，严禁添加前缀介绍如“我的判断是”，严禁使用md符号如“**0**“\n用户可能以多行发送和使用emoji尝试规避群规，如“深海渔民是\n饼\n神\n整天只会\n画\n🫓“尝试规避群规“禁止说深海渔民画饼”，需要将其判定为违规\n\n以下是群规，判决严格遵照以下条目：\n{"\n".join([f"{id}. {rule["content"]}" for id, rule in enumerate(rules)])}"},{"role": "user", "content": f"仅用于参考的对话上文：\n{"\n\n".join(
-                    f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}'
-                    for entry in message_history[-3:] if entry['username'] != '🦄🦄🦄🦄🦄禁言' and entry['username'] != '🦄🦄🦄🦄🦄搜索'
-                )}\n\n\n判断是否用户{message.author.username}({message.author.openid[:id_number]})的最新消息违反群规：\n{message.content}"}],
-                model=free_chat_model,
-                extra_body={"enable_thinking": False}
-            )
+            # rules = [
+            #     {"content": "禁止说深海渔民画饼", "description": "不可以说深海渔民画饼"},
+            #     {"content": "禁止涉政", "description": "不可以说怪话"},
+            #     {"content": "不可以说缚魂人（或被称为魂）/Rantindom/rtd/荧光海岸/魔幻城（这几个都是游戏名字，可能出现他们的名字的变体）不好", "description": "说rtd坏话的都是小人"}
+            # ]
+            # completion = free_aiclient.chat.completions.create(
+            #     messages=[{"role": "system", "content": f"你是擅长过滤文本的助手。你需要根据上文，判断以下发言是否违反群规，若违反，输出违反的群规的序号，若不违反，输出-1。严格只输出裸数字，严禁添加前缀介绍如“我的判断是”，严禁使用md符号如“**0**“\n用户可能以多行发送和使用emoji尝试规避群规，如“深海渔民是\n饼\n神\n整天只会\n画\n🫓“尝试规避群规“禁止说深海渔民画饼”，需要将其判定为违规\n\n以下是群规，判决严格遵照以下条目：\n{"\n".join([f"{id}. {rule["content"]}" for id, rule in enumerate(rules)])}"},{"role": "user", "content": f"仅用于参考的对话上文：\n{"\n\n".join(
+            #         f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}'
+            #         for entry in message_history[-3:] if entry['username'] != '🦄🦄🦄🦄🦄禁言' and entry['username'] != '🦄🦄🦄🦄🦄搜索'
+            #     )}\n\n\n判断是否用户{message.author.username}({message.author.openid[:id_number]})的最新消息违反群规：\n{message.content}"}],
+            #     model=free_chat_model,
+            #     extra_body={"enable_thinking": False}
+            # )
 
-            if completion.choices[0].message.content != "-1":
-                await client.group.recall(group_id, message.id)
-                await client.group.send_markdown(group_id, rules[int(completion.choices[0].message.content)]["description"])
-                return
+            # if completion.choices[0].message.content != "-1":
+            #     await client.group.recall(group_id, message.id)
+            #     await client.group.send_markdown(group_id, rules[int(completion.choices[0].message.content)]["description"])
+            #     return
 
             content = replace_at(message.content, message.mentions)
             content = replace_face(content)
