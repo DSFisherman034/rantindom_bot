@@ -483,7 +483,8 @@ def append_history(username, content, image_description, time):
         message = [{"role": "system", "content": "你是上文压缩助手。你需要根据对话内容，压缩上文，输出至多3句话的上文概括，固定包含1句话题概括，可包含一句用户指令提取，若上文有用户指令则提取，若没有则不提及，不需要输出如“上文没有用户指令”这种句子。username中，🦄🦄🦄🦄🦄都报 为当前你所处的agent系统所扮演的角色的发言，🦄🦄🦄🦄🦄禁言 为agent对用户禁言的结果，🦄🦄🦄🦄🦄搜索 为agent获取的网络搜索结果，🦄🦄🦄🦄🦄context_summary 为上文压缩结果，其余均为真实用户"}, {"role": "user", "content": f"上文如下：\n{"\n\n".join(conversation)}"}]
         summary = free_aiclient.chat.completions.create(
             model=free_chat_model,
-            messages=message
+            messages=message,
+            extra_body={"enable_thinking": False}
         )
 
         message_history = [{"username": "🦄🦄🦄🦄🦄context_summary", "content": summary.choices[0].message.content, "image_description": [], "time": f"{message_history[10]["time"]}前"}] + message_history[11:]
