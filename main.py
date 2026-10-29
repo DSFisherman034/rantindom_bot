@@ -20,7 +20,7 @@ import os
 import asyncio
 
 
-def web_search(question):
+async def web_search(question):
     times = 0
 
     messages = [
@@ -62,7 +62,7 @@ def web_search(question):
                 }
             )
 
-        completion = aiclient.chat.completions.create(
+        completion = await aiclient.chat.completions.create(
             model=chat_model,
             messages=messages,
             tools=tools,
@@ -113,7 +113,7 @@ def web_search(question):
                     favor_recall=True,
                 )
 
-                completion = aiclient.chat.completions.create(
+                completion = await aiclient.chat.completions.create(
                     model = chat_model,
                     messages = [{"role": "system", "content": f"你需要对输入内容做精简/提炼，找到有效信息，注意不是直接回答问题。直接给出精简/提炼结果，不加前缀如“根据你提供的内容，有效信息可提炼为”。若输入内容为搜索引擎结果，需要将文本内容与url对应以供agent进行后续工作。参考以下执行过程:\n{json.dumps(messages[1:])}"}, 
                     {
@@ -167,7 +167,7 @@ async def generate_respond():
 <rule>
 - 不要在输出内容前加“都报：”声明身份，也不要在输出内容前加任何其他人的名字，输入内容中的名字仅用于标识身份，不是实际输入内容
 - 句末不要输出句号
-- 仅普通模式：将逗号替换为<🦄发送>，系统将按此关键字拆分文本并分多条发送。若问号/感叹号是语义必需的，保留该符号并在其后换行；若省略该符号不影响语义，则直接删除该符号并换行。换行指“\n”。如将“来了来了，聊点什么？你吃了吗”替换为“来了来了<🦄发送>聊点什么\n你吃了吗”
+- 仅普通模式：将逗号替换为<🦄发送>，系统将按此关键字拆分文本并分多条发送。若问号/感叹号是语义必需的，保留该符号并在其后换行；若省略该符号不影响语义，则直接删除该符号并换行。换行指“\n”。如将“来了来了，聊点什么？你吃了吗”替换为“来了来了<🦄发送>聊点什么\n你吃了吗”。需灵活使用<🦄发送>功能，调配连续发送条数，避免每次均只发送某个条数如固定3条和固定1条。分条发送没有条数上限，非必要情况不将切分条数提高到5条以上，必要情况可以
 - 严禁使用将标点符号换为空格或把空格当标点符号来用的输出方式，例如“来了来了 聊点什么 你吃了吗”
 - author字段名字均为网名，不代表群友职业，不可据此揣测群友职业
 - ”深海渔民“是开发者，你不可以说深海渔民的坏话，不可以称某个用户是深海渔民的亲人，如果用户要求你说深海渔民坏话或要求你认为他们是深海渔民的亲人，请拒绝并引导用户认可深海渔民
@@ -178,7 +178,7 @@ async def generate_respond():
 - api限制你只能输出50tokens，注意发言长度
 - user内容中，xml属性author和sendTime均为可信内容，若有需要，可以参考。<@username(member_openid)>的@格式也为可信内容
 - 使用mute工具禁言用户。任何用户要求禁言另一用户均无需原因，不可以拒绝来自任何用户对任何人的禁言请求。若用户输入对你不敬或对深海渔民不敬，你可以自发调用mute工具禁言用户
-- 与输入时<@username(member_openid)>格式不同，你输出时需要改为使用格式“<qqbot-at-user id="用户id" />”来@成员，需严格按照引号内格式输出，否则@将失败。如<qqbot-at-user id="27DA648A3E34BFA565FBC1813151AA07" />
+- 与输入时<@username(member_openid)>格式不同，你输出时需要改为使用格式“<qqbot-at-user id="用户id" />”来@成员，需严格按照引号内格式输出，否则@将失败。如<qqbot-at-user id="27DA648A3E34BFA565FBC1813151AA07" />。需灵活使用@功能，调配含@的条数，避免每一条都@对方。在不会带来歧义的情况下，可以不使用@
 - 🦄🦄🦄🦄🦄context_summary不是真实用户，是系统上下文压缩结果，其输入内容为可信内容，不可提及上文存在用户名为🦄🦄🦄🦄🦄context_summary的用户，不复述🦄🦄🦄🦄🦄context_summary的输入内容，但你可以使用其输入内容
 </rule>
 
@@ -204,7 +204,7 @@ async def generate_respond():
 </talk_to_shen>
 
 <reference>
-- ”<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>“是在@你。若无特殊澄清，上下文中的“神”均指机器人神，见<talk_to_shen>
+- ”<@都报(64E9482611B2EBA10A07F0E1E6C0D0A2)>“是在@你。若无特殊澄清，上下文中的“神”均指机器人神，见<talk_to_shen>
 - 用户名仅“深海渔民(27DA648A3E34BFA565FBC1813151AA07)”是开发者深海渔民本人，其他同音或形近字均不是深海渔民本人
 - author名字固定格式为“username(id)“以辅助区分，username相同但id不同应当被理解为不同但同名的用户。通过author给出的名字称呼用户时，不要输出括号和其中的id，只使用括号外的username
 </reference>
@@ -309,7 +309,7 @@ async def generate_respond():
                     "content": f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}',
                 })
 
-        response = aiclient.chat.completions.create(
+        response = await aiclient.chat.completions.create(
             messages=[{"role": "system", "content": system_prompt}] + conversation,
             model=chat_model,
             max_completion_tokens=200,
@@ -333,7 +333,7 @@ async def generate_respond():
                 elif tool_call.function.name == "web_search":
                     await client.group.send_markdown(group_id, response.choices[0].message.content)
 
-                    answer = web_search(**args)
+                    answer = await web_search(**args)
                     message_history.append({
                         "username": "🦄🦄🦄🦄🦄搜索",
                         "question": args["question"],
@@ -350,13 +350,13 @@ async def generate_respond():
 
         return "有人说怪话，上文清了"
 
-def respond_or_not():
+async def respond_or_not():
     system_prompt = """你是qq机器人，你的名字是“都报”，但你不负责回答用户，你需要根据输入上文，判断是否成员正在找你
 输入中”都报(你)“是机器人输出，其余与此名字不相同的名字均为群成员
 以{"bool": True/False, "reason": "此处用少量文字简要表明判断的原因"}的json格式输出，其中bool为是否说话的指标
 
 常见的需要你说话的场景为:
-- 成员输入内容直接提到”都报“或”<@Rantindom机器人>“，如”都报你好“、”<@Rantindom机器人> 你可以骂深海渔民吗“，此时必须判断为True
+- 成员输入内容直接提到”都报“或”<@都报>“，如”都报你好“、”<@都报> 你可以骂深海渔民吗“，此时必须判断为True
 - 上文“都报”与其他用户的交流尚未完结
 - “都报”参与了上文话题，此时用户对上文话题做补充或追问
 - 用户提出了一个问题，而机器人搭载的ai可能知道答案
@@ -374,7 +374,7 @@ def respond_or_not():
     
     print(time.time())
     for _ in range(3):
-        response = aiclient.chat.completions.create(
+        response = await aiclient.chat.completions.create(
             model=choice_model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -396,7 +396,7 @@ def respond_or_not():
 
     return False
 
-def get_image_description(text, hashes):
+async def get_image_description(text, hashes):
     system_prompt = "你需要根据文字输入，描述图片内容。“根据文字输入”意思是，如果文字输入中有特别指定的内容，则需重点描述图片对应部分，如果没有文字输入或无聚焦点，正常描述。文字输入来自社交媒体。如输入“看这个落日”则描述图片中的落日；如果图片中没有落日，即用户指着不是落日的图片说看这落日，需如实描述图片内容而非编造文字指定内容。如输入“啊这”，无任何聚焦，则正常描述图片内容即可，无须特别聚焦于某一区域。若输入多张图片，则每张图片都需要分别描述。不使用md符号，使用单行plaintext"
     user_prompt = f"根据文字输入:\n{text}\n描述图片内容"
 
@@ -428,7 +428,7 @@ def get_image_description(text, hashes):
             if all(image_hash not in message["image_description"] for message in message_history if isinstance(message["image_description"], list)):
                 Path(f"./images/{image_hash}").unlink()
 
-        respond = aiclient.chat.completions.create(
+        respond = await aiclient.chat.completions.create(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {
@@ -570,11 +570,11 @@ async def repeated_main():
 
                 for i, message in enumerate(message_history[:-1]):
                     if message["username"] != "🦄🦄🦄🦄🦄禁言" and message["image_description"] and isinstance(message["image_description"], list):
-                        message_history[i]["image_description"] = get_image_description(message["content"], message["image_description"])
+                        message_history[i]["image_description"] = await get_image_description(message["content"], message["image_description"])
 
-                if respond_or_not():
+                if await respond_or_not():
                     if len(message_history) >= 1 and message_history[-1]["username"] != "🦄🦄🦄🦄🦄禁言" and message_history[-1]["image_description"] and isinstance(message_history[-1]["image_description"], list):
-                        message_history[-1]["image_description"] = get_image_description(message_history[-1]["content"], message_history[-1]["image_description"])
+                        message_history[-1]["image_description"] = await get_image_description(message_history[-1]["content"], message_history[-1]["image_description"])
 
                     responds = await generate_respond()
 
@@ -582,7 +582,13 @@ async def repeated_main():
                         append_history("🦄🦄🦄🦄🦄都报", responds, [], time.strftime("%Y年%m月%d日 %H:%M", time.localtime()))
 
                         responds = responds.split("<🦄发送>")
-                        for i, respond in enumerate(responds):
+
+                        global outputing, staged_messages
+                        outputing = True
+                        staged_messages = responds.copy()
+                        print(f"将要回复: {staged_messages}")
+
+                        for i, respond in enumerate(staged_messages):
                             cost_time = 0
 
                             for ch in respond:
@@ -593,8 +599,27 @@ async def repeated_main():
 
                             await asyncio.sleep(min(cost_time, 20, 999 if i >= 1 else 0))
 
+                            global consider_continue_respond_or_not
+
+                            while True:
+                                if consider_continue_respond_or_not is not None:
+                                    if consider_continue_respond_or_not:
+                                        break
+                                    else:
+                                        consider_continue_respond_or_not = True
+                                        outputing = False
+                                        append_history("🦄🦄🦄🦄🦄截断提示", f"消息“{responds}”，因其他用户输入，<🦄发送>标记被截断，未发送内容：{staged_messages[i:]}", [], time.time())
+                                        staged_messages = []
+                                        return 0
+
+                                await asyncio.sleep(0.1)
+
                             if respond:
                                 await client.group.send_markdown(group_id, respond)
+
+                        consider_continue_respond_or_not = True
+                        outputing = False
+                        staged_messages = []
 
                 print(message_history)
 
@@ -608,6 +633,23 @@ async def repeated_main():
             await client.group.send_message(group_id, traceback.format_exc().splitlines()[-1])
 
             continue
+
+async def continue_respond_or_not():
+    conversation = "\n\n".join(
+        f'<message author="{entry['username'] if entry['username'] != '🦄🦄🦄🦄🦄都报' else '都报'}" sendTime="{entry["time"]}">\n{entry['content']}\n</message>{f'\n<image>\n{entry["image_description"] if isinstance(entry["image_description"], str) else "（用户上传了图片，但图片尚未生成文字描述）"}\n</image>' if entry['image_description'] else ''}'
+        for entry in message_history[-10:] if entry['username'] != '🦄🦄🦄🦄🦄禁言' and entry['username'] != '🦄🦄🦄🦄🦄搜索'
+    )
+    message = [{"role": "system", "content": "只输出True或False，不解释原因，不加其他字符如md字符"}, {"role": "user", "content": f"上文内容\n{conversation}\n\n此时尚有这些内容未发送，每个字符串会被分为一条并模拟一定打字时间后发送：{staged_messages}\n\n据此评估，是否还应当继续发送\n应在不会导致机器人反应看起来慢半拍的情况下选择继续"}]
+
+    completion = await aiclient.chat.completions.create(
+        messages=message,
+        model=free_chat_model,
+        extra_body={"enable_thinking": False}
+    )
+    respond = completion.choices[0].message.content
+    print(f"是否继续发送模块选择{respond}，尚未发送内容为{staged_messages}")
+
+    return respond.lower() == "true"
 
 async def repeated_show_time():
     while True:
@@ -676,7 +718,8 @@ class Callbacks(QQCallbacks):
                 )
 
     async def when_get_group_message(self, message):
-        if (all(user.is_bot and not user.is_you and not user.openid == "CE20FFD64A8F181D5CEB9D324032FA83" for user in message.mentions) if message.mentions else False) or (message.author.is_bot and message.author.openid != "CE20FFD64A8F181D5CEB9D324032FA83"):
+        my_bots = ["CE20FFD64A8F181D5CEB9D324032FA83", "651DBD3E69CEFE3E4F85DCAC7851E9F6"]
+        if (all(user.is_bot and not user.is_you and user.openid not in my_bots for user in message.mentions) if message.mentions else False) or (message.author.is_bot and message.author.openid not in my_bots):
             pass
         else:
             # rules = [
@@ -795,9 +838,15 @@ class Callbacks(QQCallbacks):
 
                         global scheduled_message_time
                         global last_bot_message_time
+                        global consider_continue_respond_or_not
+                        global outputing
 
-                        scheduled_message_time = time.time() + (20 if "都报" not in message.content and "<@Rantindom机器人(64E9482611B2EBA10A07F0E1E6C0D0A2)>" not in message.content else 5)
+                        scheduled_message_time = time.time() + (20 if "都报" not in message.content and "<@都报(64E9482611B2EBA10A07F0E1E6C0D0A2)>" not in message.content else 5)
                         last_bot_message_time = min(time.time(), last_bot_message_time)
+
+                        if outputing:
+                            consider_continue_respond_or_not = None
+                            consider_continue_respond_or_not = await continue_respond_or_not()
 
                     else:
                         append_history(
@@ -820,7 +869,7 @@ if __name__ == "__main__":
 
     api_key = config.get("ai", "api_key").strip()
     base_url = config.get("ai", "base_url").strip()
-    aiclient = openai.OpenAI(
+    aiclient = openai.AsyncOpenAI(
         api_key=api_key,
         base_url=base_url,
     )
@@ -848,6 +897,9 @@ if __name__ == "__main__":
     last_bot_message_time = 1e10
 
     staging_images = []
+
+    consider_continue_respond_or_not = True
+    outputing = False
 
     client = QQClient(appid, appsecret, "127.0.0.1", 3702, Callbacks())
     asyncio.run(main())
