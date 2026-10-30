@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 import traceback
 import os
 import asyncio
+import logging
 
 
 async def web_search(question):
@@ -404,7 +405,9 @@ async def get_image_description(text, hashes):
     hashes = [i for i in hashes if i != "toobig"]
 
     global staging_images
-    staging_images = [hash for hash in staging_images if hash not in hashes]
+    log.error(f"删前：{staging_images}，history：{message_history}")
+    staging_images = [hash for hash in staging_images if hash not in hashes and any(hash in message["image_description"] for message in message_history if isinstance(message["image_description"], list))]
+    log.error(f"删后：{staging_images}，history：{message_history}")
 
     if len(hashes) > 0:
         urls = []
@@ -426,6 +429,7 @@ async def get_image_description(text, hashes):
             urls.append(f"data:{mime};base64,{image_base64}")
 
             if all(image_hash not in message["image_description"] for message in message_history if isinstance(message["image_description"], list)):
+                log.error(f"删掉了{image_hash}")
                 Path(f"./images/{image_hash}").unlink()
 
         respond = await aiclient.chat.completions.create(
@@ -447,6 +451,8 @@ async def get_image_description(text, hashes):
         return f"用户上传了{big_image_count}张图片，因它{"们" if big_image_count >= 1 else ""}大于5Mb，故拒绝读取"
 
 def append_history(username, content, image_description, time):
+    log.error(f"存入了{image_description}，本条消息文字内容: {content}")
+
     global staging_images
     global message_history
 
@@ -492,6 +498,7 @@ def append_history(username, content, image_description, time):
     folder = Path("./images")
     for file in folder.iterdir():
         if file.is_file() and file.name not in staging_images:
+            log.error(f"删掉了{file.name}")
             Path(f"./images/{file.name}").unlink()
 
 def replace_at(content, mentions):
@@ -860,6 +867,17 @@ async def main():
     await asyncio.gather(client.run(), task1, task2)
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.ERROR,
+        format="%(asctime)s [%(levelname)s] %(name)s:%(lineno)d %(message)s",
+        handlers=[
+            logging.handlers.RotatingFileHandler(
+                "./log.log", maxBytes=5 * 1024 * 1024, backupCount=5
+            )
+        ],
+    )
+    log = logging.getLogger(__name__)
+
     config = configparser.ConfigParser()
     config.read("./config.ini", encoding="utf-8")
 
