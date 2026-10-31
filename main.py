@@ -595,6 +595,8 @@ async def repeated_main():
                         staged_messages = responds.copy()
                         print(f"将要回复: {staged_messages}")
 
+                        still_need_to_break_the_for = False
+
                         for i, respond in enumerate(staged_messages):
                             cost_time = 0
 
@@ -615,11 +617,16 @@ async def repeated_main():
                                     else:
                                         consider_continue_respond_or_not = True
                                         outputing = False
-                                        append_history("🦄🦄🦄🦄🦄截断提示", f"消息“{responds}”，因其他用户输入，<🦄发送>标记被截断，未发送内容：{staged_messages[i:]}", [], time.time())
+                                        append_history("🦄🦄🦄🦄🦄截断提示", f"消息“{"<🦄发送>".join(responds)}”，因其他用户输入，<🦄发送>标记被截断，未发送内容：{staged_messages[i:]}", [], time.time())
                                         staged_messages = []
-                                        return 0
+
+                                        still_need_to_break_the_for = True
+                                        break
 
                                 await asyncio.sleep(0.1)
+
+                            if still_need_to_break_the_for:
+                                break
 
                             if respond:
                                 await client.group.send_markdown(group_id, respond)
@@ -848,7 +855,7 @@ class Callbacks(QQCallbacks):
                         global consider_continue_respond_or_not
                         global outputing
 
-                        scheduled_message_time = time.time() + (20 if "都报" not in message.content and "<@都报(64E9482611B2EBA10A07F0E1E6C0D0A2)>" not in message.content else 5)
+                        scheduled_message_time = time.time() + (5 if "都报" in message.content else 20)
                         last_bot_message_time = min(time.time(), last_bot_message_time)
 
                         if outputing:
