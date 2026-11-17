@@ -406,7 +406,7 @@ async def get_image_description(text, hashes):
 
     global staging_images
     log.error(f"删前：{staging_images}，history：{message_history}")
-    staging_images = [hash for hash in staging_images if hash not in hashes and any(hash in message["image_description"] for message in message_history if isinstance(message["image_description"], list))]
+    staging_images = [hash for hash in staging_images if any(hash in message["image_description"] for message in message_history if isinstance(message["image_description"], list))]
     log.error(f"删后：{staging_images}，history：{message_history}")
 
     if len(hashes) > 0:
@@ -842,7 +842,7 @@ class Callbacks(QQCallbacks):
 
                     if chat_or_not:
                         append_history(
-                            f"{message.author.username}({message.author.openid[:id_number]})",
+                            f"{message.author.username}(群昵称: {message.author.nickname})(id: {message.author.openid[:id_number]})",
                             f"{content}{f'\n(附带上文引用内容：\n{message.quote.content}\n)' if message.quote.content else ''}",
                             image_hashes,
                             replace_time(message.timestamp)
@@ -875,7 +875,7 @@ async def main():
 
 if __name__ == "__main__":
     logging.basicConfig(
-        level=logging.ERROR,
+        level=logging.DEBUG,
         format="%(asctime)s [%(levelname)s] %(name)s:%(lineno)d %(message)s",
         handlers=[
             logging.handlers.RotatingFileHandler(
